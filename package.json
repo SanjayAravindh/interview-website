@@ -1,0 +1,9 @@
+{
+  "name": "interview-notes",
+  "private": true,
+  "description": "Browse local markdown interview notes in a sidebar and render them as HTML.",
+  "scripts": {
+    "start": "node server.js",
+    "build": "node build-notes.js"
+  }
+}
