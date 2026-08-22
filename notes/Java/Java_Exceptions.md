@@ -1,5 +1,5 @@
 # Master Java Exceptions — Senior Developer Level
-## Complete Course — Parts 1–24, plus a Common Exceptions Reference
+
 
 ---
 
