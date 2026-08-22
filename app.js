@@ -75,7 +75,7 @@
     setPlaceholder("Loading…");
 
     try {
-      const response = await fetch(encodeURI(note.file));
+      const response = await fetch(encodeURI(note.file), { cache: "no-store" });
       if (!response.ok) {
         throw new Error(`Could not load ${note.file} (${response.status})`);
       }
