@@ -27,7 +27,7 @@ The ".class file" is the artifact you can copy to any machine. The JVM is what d
 
 ### 3. How it works internally
 
-The JVM is not literally an interpreter that translates each bytecode instruction one-by-one forever (that would be slow). It's a system with multiple execution strategies working together (detailed fully in Concept 4), but the shape is:
+The JVM is not literally an interpreter that translates each bytecode instruction one-by-one forever (that would be slow). It's a system with multiple execution strategies working together (detailed fully in Concept 4: The Execution Engine — Interpreter, JIT Compiler, and Tiered Compilation), but the shape is:
 
 1. **Interpreter** — when a `.class` file is loaded, the JVM initially just interprets bytecode instructions directly, one at a time. This starts execution immediately with no compilation delay.
 2. **JIT (Just-In-Time) compiler** — the JVM profiles which methods are called frequently ("hot" methods) and compiles *those specific methods* down to real native machine code at runtime, so subsequent calls run at near-C speed instead of being interpreted.
@@ -53,7 +53,7 @@ public class Hello {
 1. `javac Hello.java` → produces `Hello.class`, containing bytecode, not machine code.
 2. You (or anyone, on any OS) run `java Hello`.
 3. The `java` launcher starts a **native OS process** for your specific platform (this native executable *is* the JVM for your OS/CPU).
-4. That JVM process reads `Hello.class`, loads the `Hello` class (this triggers the class-loading pipeline — Concept 2).
+4. That JVM process reads `Hello.class`, loads the `Hello` class (this triggers the class-loading pipeline — Concept 2: The Class Loading Pipeline — Loading, Linking, Initialization).
 5. The JVM's interpreter begins executing the bytecode for `main`, instruction by instruction. For `int a = 2;`, the bytecode is something like `iconst_2` then `istore_1` — "push constant 2 onto the operand stack" then "store top of stack into local variable slot 1."
 6. Since `main` runs only once, the JIT compiler won't bother compiling it (not "hot") — it just stays interpreted for this trivial example.
 7. `System.out.println` executes, producing output through native OS calls the JVM makes on your behalf.
@@ -62,7 +62,7 @@ Notice: the exact same `Hello.class` file would go through this identical byteco
 
 ### 6. Memory/thread interactions
 
-At this stage, the relevant point is: the JVM process, once started, owns its own memory regions (heap, stack, metaspace — Concept 3) entirely separate from the OS process's raw memory management. Bytecode instructions like `iconst_2`/`istore_1` operate on an **operand stack** and **local variable array**, both part of the current thread's stack frame. No cross-thread interaction happens yet in this single-threaded example — that becomes relevant once multiple threads and the Java Memory Model enter the picture.
+At this stage, the relevant point is: the JVM process, once started, owns its own memory regions (heap, stack, metaspace — Concept 3: JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) entirely separate from the OS process's raw memory management. Bytecode instructions like `iconst_2`/`istore_1` operate on an **operand stack** and **local variable array**, both part of the current thread's stack frame. No cross-thread interaction happens yet in this single-threaded example — that becomes relevant once multiple threads and the Java Memory Model enter the picture.
 
 ### 7. Common misconceptions
 
@@ -125,9 +125,9 @@ A crucial detail: **loading and linking can happen early/eagerly, but initializa
 
 Merely *referencing* a class (e.g., declaring a variable of that type, or calling a static-final constant that's inlined at compile time) does **not** trigger initialization.
 
-### 4. Connection to Concept 1
+### 4. Connection to Concept 1 (Why the JVM Exists — Compilation, Bytecode, and the Abstraction Layer)
 
-In Concept 1, "`Hello.class` is loaded" was a black-box step. Now, precisely: when `java Hello` runs, the Bootstrap loader loads core JDK classes it needs first, the Application ClassLoader loads `Hello` (Loading), the bytecode is verified and static fields defaulted (Linking), and only when `main` is about to execute does `Hello`'s own static initializers run (Initialization) — immediately followed by the interpreter beginning execution of `main`'s bytecode.
+In Concept 1 (Why the JVM Exists — Compilation, Bytecode, and the Abstraction Layer), "`Hello.class` is loaded" was a black-box step. Now, precisely: when `java Hello` runs, the Bootstrap loader loads core JDK classes it needs first, the Application ClassLoader loads `Hello` (Loading), the bytecode is verified and static fields defaulted (Linking), and only when `main` is about to execute does `Hello`'s own static initializers run (Initialization) — immediately followed by the interpreter beginning execution of `main`'s bytecode.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -208,7 +208,7 @@ The JVM runtime memory is divided into five areas. Some are **per-thread** (one 
 
 **Shared areas** (one copy for the entire JVM process, accessible by all threads):
 4. **Heap** — where **all objects and arrays** live, no matter which thread created them. This is the *only* place where object data is shared between threads by default, and it's the sole target of garbage collection. The heap is further subdivided (Young Generation: Eden + Survivor spaces, Old Generation) — relevant for GC.
-5. **Metaspace** (replaced the old "PermGen" in Java 8+) — stores class-level metadata: the `Class` objects themselves, method bytecode, the runtime constant pool structures, static field storage. This is exactly what gets populated during the Loading/Linking phases from Concept 2. Unlike the heap, Metaspace lives in native (off-heap) memory and grows dynamically by default.
+5. **Metaspace** (replaced the old "PermGen" in Java 8+) — stores class-level metadata: the `Class` objects themselves, method bytecode, the runtime constant pool structures, static field storage. This is exactly what gets populated during the Loading/Linking phases from Concept 2 (The Class Loading Pipeline — Loading, Linking, Initialization). Unlike the heap, Metaspace lives in native (off-heap) memory and grows dynamically by default.
 
 ### 3. How it works internally — connecting a method call to memory
 
@@ -222,10 +222,10 @@ When thread T calls a method `foo(int x)`:
 
 This is the mechanical basis for **stack memory being automatically reclaimed (no GC needed)** vs. **heap memory needing garbage collection** (because heap objects can outlive the method/frame that created them, and the JVM doesn't know in advance when the *last* reference to an object disappears).
 
-### 4. Connection to Concepts 1 and 2
+### 4. Connection to Concepts 1 (Why the JVM Exists — Compilation, Bytecode, and the Abstraction Layer) and 2 (The Class Loading Pipeline — Loading, Linking, Initialization)
 
-- Concept 1's bytecode instructions (`iconst_2`, `istore_1`) operate directly on the **operand stack** and **local variable array** described here.
-- Concept 2's class loading pipeline populates **Metaspace**: `Class` objects go there during Loading, static fields get their default-zero storage there during Preparation, and their real values get written there during Initialization. This is also why static fields are **shared across all threads** by default — there's exactly one copy in Metaspace, not one per thread.
+- The bytecode instructions (`iconst_2`, `istore_1`) from Concept 1 (Why the JVM Exists — Compilation, Bytecode, and the Abstraction Layer) operate directly on the **operand stack** and **local variable array** described here.
+- The pipeline from Concept 2 (The Class Loading Pipeline — Loading, Linking, Initialization) populates **Metaspace**: `Class` objects go there during Loading, static fields get their default-zero storage there during Preparation, and their real values get written there during Initialization. This is also why static fields are **shared across all threads** by default — there's exactly one copy in Metaspace, not one per thread.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -309,9 +309,9 @@ But Java is dynamic — a new class could be loaded later that also implements t
 
 ### 4. Connection to Concepts 1–3
 
-- Concept 1 introduced "interpreter + JIT" as a black box; this concept unpacks it into the actual tiered pipeline with concrete promotion criteria (invocation counters) and a named optimizing compiler (C2) with named techniques (inlining, escape analysis).
-- The bytecode being interpreted/compiled is exactly the bytecode loaded and verified during Concept 2's Linking phase, and stored in Metaspace (Concept 3) — the Execution Engine reads method bytecode from there.
-- The **stack frames** from Concept 3 (local variable array, operand stack) are what the *interpreter* directly manipulates per-instruction. Once C1/C2 compile a method to native code, the compiled code still honors the same frame *contract* (so stack traces, exceptions, and deoptimization can still find the right local variables) but internally executes as real machine instructions operating on CPU registers, not by walking bytecode.
+- Concept 1 (Why the JVM Exists — Compilation, Bytecode, and the Abstraction Layer) introduced "interpreter + JIT" as a black box; this concept unpacks it into the actual tiered pipeline with concrete promotion criteria (invocation counters) and a named optimizing compiler (C2) with named techniques (inlining, escape analysis).
+- The bytecode being interpreted/compiled is exactly the bytecode loaded and verified during the Linking phase of Concept 2 (The Class Loading Pipeline — Loading, Linking, Initialization), and stored in Metaspace (Concept 3: JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) — the Execution Engine reads method bytecode from there.
+- The **stack frames** from Concept 3 (JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) (local variable array, operand stack) are what the *interpreter* directly manipulates per-instruction. Once C1/C2 compile a method to native code, the compiled code still honors the same frame *contract* (so stack traces, exceptions, and deoptimization can still find the right local variables) but internally executes as real machine instructions operating on CPU registers, not by walking bytecode.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -344,7 +344,7 @@ class Demo {
 ### 6. Memory/thread interactions
 
 - **Compilation happens on separate background compiler threads** (`C1 CompilerThread`, `C2 CompilerThread`), not on the application thread running the loop — this is why JIT compilation doesn't "pause" your program.
-- Compiled native code is stored in a JVM-managed region called the **Code Cache** — a separate memory area from the ones in Concept 3, specifically for storing compiled machine code.
+- Compiled native code is stored in a JVM-managed region called the **Code Cache** — a separate memory area from the ones in Concept 3 (JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack), specifically for storing compiled machine code.
 - **Deoptimization requires safely reconstructing the interpreter's frame state** (local variable array, operand stack) from the optimized machine code's register/stack layout at the exact point of failure — possible because the JVM maintains metadata mapping compiled code back to bytecode offsets.
 - Since compilation is background and asynchronous, **different threads can be executing different tiers of the same method simultaneously** for a brief window during promotion — safe because the JVM atomically swaps the "which code to jump to" pointer for that method; no thread ever executes a torn/partial compilation.
 
@@ -370,7 +370,7 @@ class Demo {
 
 ### 1. The problem it solves
 
-Concept 3 established that the **Heap** holds every object, and unlike the Stack, nothing automatically pops heap memory when a method returns — because an object can easily outlive the method that created it (it might be stored in a field, a collection, passed to another thread). This creates a hard problem:
+Concept 3 (JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) established that the **Heap** holds every object, and unlike the Stack, nothing automatically pops heap memory when a method returns — because an object can easily outlive the method that created it (it might be stored in a field, a collection, passed to another thread). This creates a hard problem:
 
 - The JVM allocates heap memory continuously (every `new`), but the heap is finite. Eventually it fills up.
 - The JVM cannot ask the programmer "are you done with this object?" — Java deliberately has no manual `free()`. So the JVM must figure out **by itself** which objects are no longer usable by the program, and reclaim exactly those, without ever reclaiming an object that's still in use (which would corrupt the program) and without leaving reclaimable garbage sitting around forever (which would exhaust memory).
@@ -383,8 +383,8 @@ Garbage Collection (GC) is the JVM's solution, and everything about its design f
 **Reachability, not reference counting.** The JVM does not decide an object is garbage by counting how many references point to it (that approach, used by some other systems, fails on cyclic references — two objects pointing only at each other, but unreachable from anywhere else, would never be collected). Instead, the JVM defines a set of fixed, guaranteed-alive starting points called **GC Roots**, and an object is considered **reachable** (alive) if and only if there exists a chain of references from *some* GC Root to that object. Anything **not reachable** from any GC Root is garbage, no matter how many objects still point to each other in an isolated cluster.
 
 **GC Roots** are references the JVM knows are inherently alive without needing to trace anything further back. They include:
-- Local variables and parameters currently on any thread's **JVM Stack** (Concept 3) — i.e., anything a currently-executing method can directly reach.
-- Active **static fields** in Metaspace (Concept 3) — these are always reachable as long as their class is loaded.
+- Local variables and parameters currently on any thread's **JVM Stack** (Concept 3: JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) — i.e., anything a currently-executing method can directly reach.
+- Active **static fields** in Metaspace (Concept 3: JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) — these are always reachable as long as their class is loaded.
 - JNI references (native code holding onto a Java object).
 - Objects referenced from currently-running threads themselves (the `Thread` objects).
 
@@ -412,12 +412,12 @@ The JVM exploits this by physically dividing the heap into **generations**, so i
 
 Because most objects die in Eden and never get copied at all, a Minor GC's cost is proportional to the (small) number of *survivors*, not the (large) number of total allocations — this is what makes Minor GC extremely fast and frequent, compared to a Major/Full GC, which must scan the much larger, longer-lived Old Generation and is correspondingly rarer but far more expensive.
 
-### 4. Connection to Concepts 3 and 4
+### 4. Connection to Concepts 3 (JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) and 4 (The Execution Engine — Interpreter, JIT Compiler, and Tiered Compilation)
 
-- This concept directly explains *why* the Heap (Concept 3) is subdivided into Eden/Survivor/Old — a detail left unexplained there. Now you know: it's a direct engineering response to the generational hypothesis.
-- GC Roots include the **JVM Stack's local variable arrays** and **Metaspace's static fields** — exactly the two per-thread and shared memory regions from Concept 3. This is the precise mechanical link between "where references live" (Concept 3) and "what counts as alive" (this concept).
+- This concept directly explains *why* the Heap (Concept 3: JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) is subdivided into Eden/Survivor/Old — a detail left unexplained there. Now you know: it's a direct engineering response to the generational hypothesis.
+- GC Roots include the **JVM Stack's local variable arrays** and **Metaspace's static fields** — exactly the two per-thread and shared memory regions from Concept 3 (JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack). This is the precise mechanical link between "where references live" (Concept 3: JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) and "what counts as alive" (this concept).
 - Object headers, mentioned when discussing object creation, store the **age counter** used to decide Old Generation promotion — the mark word isn't just for locking, it's core GC machinery too.
-- GC pauses interact with the Execution Engine (Concept 4): most collectors need to briefly pause application threads at a **safepoint** (a point where a thread's stack is in a consistent, known state) so the collector can safely read that thread's stack frames as GC Roots without the thread mutating them mid-scan. JIT-compiled code has to cooperate by polling for safepoint requests at appropriate points (e.g., loop back-edges) — another reason loop compilation (Concept 4) has special handling.
+- GC pauses interact with the Execution Engine (Concept 4: The Execution Engine — Interpreter, JIT Compiler, and Tiered Compilation): most collectors need to briefly pause application threads at a **safepoint** (a point where a thread's stack is in a consistent, known state) so the collector can safely read that thread's stack frames as GC Roots without the thread mutating them mid-scan. JIT-compiled code has to cooperate by polling for safepoint requests at appropriate points (e.g., loop back-edges) — another reason loop compilation (Concept 4: The Execution Engine — Interpreter, JIT Compiler, and Tiered Compilation) has special handling.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -450,7 +450,7 @@ class Demo {
 2. Three `Node` objects get allocated in **Eden**, via TLAB bump-pointer allocation.
 3. `a.next = b; b.next = a;` creates a **reference cycle** between `a` and `b` — under a naive reference-counting scheme, these would never be collected (each has a count of 1, forever). Under reachability-based GC, this doesn't matter at all.
 4. `cache = temp;` — now `temp`'s `Node` is reachable via the **static field GC Root**, independent of the local stack frame.
-5. `process()` returns — the stack frame is popped (Concept 3). The local variables `temp`, `a`, `b` (the *references*, on the stack) vanish. But the *objects* they pointed to are still on the heap.
+5. `process()` returns — the stack frame is popped (Concept 3: JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack). The local variables `temp`, `a`, `b` (the *references*, on the stack) vanish. But the *objects* they pointed to are still on the heap.
 6. Suppose a Minor GC triggers next. The collector starts from GC Roots: `cache` (static field) → reaches `temp`'s object → marks it live, copies it to a Survivor space. The `Node` objects formerly referenced by local variables `a` and `b` are **not reachable from any GC Root anymore** (the stack frame that held those references is gone) — even though `a` and `b` still reference each other, neither is reachable from a root, so **both are correctly identified as garbage** and left behind in Eden, i.e., collected.
 
 This example is precisely why interviewers love asking about reference cycles — it's the clearest demonstration that Java's GC is reachability-based, not refcount-based.
@@ -484,7 +484,7 @@ This example is precisely why interviewers love asking about reference cycles �
 
 ### 1. The problem it solves
 
-Concept 5 established the *conceptual* algorithm (Mark, then reclaim garbage) and *why* the heap is generational. But it deliberately left open a hard engineering question: **how do you actually implement "mark and reclaim" on a real, large heap, for a real, running, latency-sensitive application?**
+Concept 5 (Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists) established the *conceptual* algorithm (Mark, then reclaim garbage) and *why* the heap is generational. But it deliberately left open a hard engineering question: **how do you actually implement "mark and reclaim" on a real, large heap, for a real, running, latency-sensitive application?**
 
 Different applications have wildly different priorities:
 - A short-lived batch/CLI tool just wants the *total* job done fastest — pause time doesn't matter, only total throughput.
@@ -495,13 +495,13 @@ No single collection algorithm optimizes for all of these simultaneously — pau
 
 ### 2. The concept, completely
 
-All the collectors below still obey the reachability/GC-roots/generational model from Concept 5 — they differ in **how** they implement marking, and **how** they reclaim/compact memory, and **whether** they pause all application threads or work concurrently.
+All the collectors below still obey the reachability/GC-roots/generational model from Concept 5 (Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists) — they differ in **how** they implement marking, and **how** they reclaim/compact memory, and **whether** they pause all application threads or work concurrently.
 
 **Serial GC** — the simplest collector. Uses a single thread for both Minor and Major GC, and **stops all application threads** for the entire duration of a collection. Good for small heaps or single-CPU environments where the overhead of coordinating multiple GC threads isn't worth it. Predictable, but pause times scale directly with heap/live-set size — unsuitable for large heaps or latency-sensitive services.
 
 **Parallel GC** (the JVM's throughput-focused default in many older versions) — uses **multiple threads** to do the marking/copying work during a collection, but is still fundamentally **stop-the-world**: application threads are paused while the (now-parallel) GC threads do their work faster than Serial GC could alone. This reduces pause *duration* compared to Serial GC (more hands doing the same work) without eliminating the pause itself. Optimizes for **maximum throughput** (highest percentage of total time spent running application code, not GC) at the cost of occasionally longer individual pauses — a good fit for batch processing, where total job completion time matters more than any single pause.
 
-**G1 (Garbage-First) GC** — the default collector in modern JDKs (since JDK 9). G1 makes a structural change: instead of treating Eden/Survivor/Old as large, contiguous, fixed regions, it divides the heap into **many small, fixed-size regions** (typically 1–32MB each), and each region is *dynamically* labeled Eden, Survivor, or Old as needed — there's no longer one giant contiguous Old Generation. G1's key insight: it tracks how much *garbage* is in each region, and on each collection cycle, it prioritizes collecting the regions **with the most garbage first** ("Garbage-First") — giving the best reclaimed-memory-per-unit-of-pause-time ratio. G1 does most of its marking **concurrently** with the application (using write barriers similar to the card-table idea from Concept 5, but a finer-grained structure called a "remembered set" per region), and only pauses the application briefly to evacuate (copy) live objects out of the selected regions. This lets G1 target a **configurable maximum pause time** (`-XX:MaxGCPauseMillis`) as a soft goal, rather than pause time being an uncontrolled side effect of heap size.
+**G1 (Garbage-First) GC** — the default collector in modern JDKs (since JDK 9). G1 makes a structural change: instead of treating Eden/Survivor/Old as large, contiguous, fixed regions, it divides the heap into **many small, fixed-size regions** (typically 1–32MB each), and each region is *dynamically* labeled Eden, Survivor, or Old as needed — there's no longer one giant contiguous Old Generation. G1's key insight: it tracks how much *garbage* is in each region, and on each collection cycle, it prioritizes collecting the regions **with the most garbage first** ("Garbage-First") — giving the best reclaimed-memory-per-unit-of-pause-time ratio. G1 does most of its marking **concurrently** with the application (using write barriers similar to the card-table idea from Concept 5: Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists, but a finer-grained structure called a "remembered set" per region), and only pauses the application briefly to evacuate (copy) live objects out of the selected regions. This lets G1 target a **configurable maximum pause time** (`-XX:MaxGCPauseMillis`) as a soft goal, rather than pause time being an uncontrolled side effect of heap size.
 
 **ZGC (and similarly, Shenandoah)** — designed for **very large heaps (multi-terabyte) with sub-millisecond pause targets**, regardless of heap size. The key technique: ZGC does almost all of its work — including the actual moving/compacting of live objects — **concurrently** with running application threads, using a technique involving **colored pointers** (extra metadata bits embedded directly in object references) and **load barriers** (a small check inserted on every reference read, which can transparently "fix up" a pointer if the object it points to has been concurrently relocated). This means application threads can keep running and even keep dereferencing objects *while* the collector is moving them in the background — the load barrier ensures correctness is never violated. The tradeoff: this level of concurrency requires more CPU overhead per memory access (the barrier check) and higher implementation complexity, in exchange for pause times that stay in the single-digit-millisecond range even on enormous heaps.
 
@@ -509,7 +509,7 @@ All the collectors below still obey the reachability/GC-roots/generational model
 
 G1's cycle has two interleaved parts:
 
-1. **Young-only collections** (like a Minor GC): G1 periodically evacuates all live objects out of a selected set of Eden/Survivor regions into new regions, exactly like the copying collection from Concept 5, just region-based instead of one-big-space-based.
+1. **Young-only collections** (like a Minor GC): G1 periodically evacuates all live objects out of a selected set of Eden/Survivor regions into new regions, exactly like the copying collection from Concept 5 (Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists), just region-based instead of one-big-space-based.
 2. **Concurrent marking cycle** (for Old Gen regions): triggered when overall heap occupancy crosses a threshold (e.g., 45% by default). This runs mostly concurrently with the application:
    - **Initial Mark** — piggybacked on a Young collection (brief pause), marks GC-Root-reachable objects.
    - **Concurrent Marking** — traces the object graph from those roots *while the application keeps running*, using write barriers (SATB — snapshot-at-the-beginning — barriers) to correctly handle references the application mutates mid-trace.
@@ -519,12 +519,12 @@ G1's cycle has two interleaved parts:
 
 This design is precisely why G1 rarely needs a full, heap-wide Stop-The-World collection under normal operation — it reclaims Old Gen incrementally, in pieces, interleaved with routine Young collections.
 
-### 4. Connection to Concept 5
+### 4. Connection to Concept 5 (Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists)
 
-- Every collector here still relies on **GC Roots and reachability** exactly as defined in Concept 5 — nothing about that changes; these algorithms only change *how the heap is physically organized* and *how/when marking and copying happen relative to application threads*.
-- **Card tables** (Concept 5) generalize into **remembered sets** in G1 — the same underlying problem (efficiently tracking cross-region/cross-generation references without scanning everything) solved at finer granularity, since G1 has many small regions instead of one big Old Gen.
-- The **copying/evacuation mechanism** (Concept 5's Minor GC: live objects copied out, garbage left behind and reclaimed wholesale) is the same core mechanic every one of these collectors uses for Young Gen — Serial and Parallel just do it stop-the-world across one big Eden/Survivor space; G1 does it region-by-region.
-- **Safepoints** (Concept 5) are still required for every STW phase in every collector, including the brief pauses within G1 and ZGC — full concurrency doesn't eliminate the need for *some* synchronization points, it just minimizes their frequency and duration.
+- Every collector here still relies on **GC Roots and reachability** exactly as defined in Concept 5 (Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists) — nothing about that changes; these algorithms only change *how the heap is physically organized* and *how/when marking and copying happen relative to application threads*.
+- **Card tables** (Concept 5: Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists) generalize into **remembered sets** in G1 — the same underlying problem (efficiently tracking cross-region/cross-generation references without scanning everything) solved at finer granularity, since G1 has many small regions instead of one big Old Gen.
+- The **copying/evacuation mechanism** — the Minor GC from Concept 5 (Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists), where live objects are copied out and garbage is left behind and reclaimed wholesale — is the same core mechanic every one of these collectors uses for Young Gen — Serial and Parallel just do it stop-the-world across one big Eden/Survivor space; G1 does it region-by-region.
+- **Safepoints** (Concept 5: Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists) are still required for every STW phase in every collector, including the brief pauses within G1 and ZGC — full concurrency doesn't eliminate the need for *some* synchronization points, it just minimizes their frequency and duration.
 
 ### 5. Step-by-step, concrete comparison scenario
 
@@ -569,7 +569,7 @@ Everything from Concepts 1–6 was about a *single execution engine* running byt
 Here's the concrete problem. On modern hardware, "writing a variable" is not the simple, instantaneous, globally-visible act it feels like in source code. Two independent forces conspire to break your intuition:
 
 1. **CPU caches.** Each CPU core has its own L1/L2 cache. When Thread A (running on Core 1) writes a variable, that write often lands in Core 1's cache first — not immediately in main memory. Thread B (running on Core 2) reading the "same" variable might be reading from Core 2's own cache, which was never notified of Core 1's write. Thread B can then loop forever reading a stale value, **never seeing** Thread A's update — not eventually, not ever, without something forcing synchronization.
-2. **Reordering.** Both the compiler (including the JIT, from Concept 4) and the CPU itself are allowed to **execute instructions in a different order than you wrote them**, as long as the reordering doesn't change the outcome *for that single thread, in isolation*. This is a legitimate, essential optimization (e.g., reordering independent instructions to avoid pipeline stalls, hoisting a read out of a loop). But "doesn't change the outcome for a single thread" says *nothing* about what other threads observe — a reordering invisible to Thread A can be very visible, and very wrong, to Thread B watching from outside.
+2. **Reordering.** Both the compiler (including the JIT, from Concept 4: The Execution Engine — Interpreter, JIT Compiler, and Tiered Compilation) and the CPU itself are allowed to **execute instructions in a different order than you wrote them**, as long as the reordering doesn't change the outcome *for that single thread, in isolation*. This is a legitimate, essential optimization (e.g., reordering independent instructions to avoid pipeline stalls, hoisting a read out of a loop). But "doesn't change the outcome for a single thread" says *nothing* about what other threads observe — a reordering invisible to Thread A can be very visible, and very wrong, to Thread B watching from outside.
 
 Without a formal set of rules governing this, "correct multithreaded Java program" would be undefined — you'd have no way to know, for a given piece of code, whether a write by one thread is *guaranteed* to become visible to another thread, or in what order. The **Java Memory Model (JMM)**, formally defined in the JLS, exists to give exact, portable guarantees about this — independent of any specific CPU architecture or compiler implementation.
 
@@ -591,15 +591,15 @@ To make this mechanical rather than abstract, here's what's physically happening
 
 - **Store buffers**: when a CPU core executes a write, it typically doesn't go straight to that core's cache (let alone main memory) — it first goes into a small, per-core **store buffer**, allowing the core to continue executing subsequent instructions without stalling for the write to complete. The write is flushed out of the store buffer to cache (and eventually, via cache-coherence protocols, toward other cores) at some later, unspecified time.
 - **Per-core caches with coherence protocols**: even once a write reaches a core's L1 cache, propagating that update to *other* cores' caches (so they invalidate/refresh their stale copies) happens via a hardware cache-coherence protocol (e.g., MESI) — which does eventually keep caches consistent, but **only for individual memory operations that are actually synchronized with an appropriate barrier**; a plain, unfenced read on another core can still observe an old cached value for an unbounded (in the *formal* model, unlimited) amount of time.
-- **Instruction reordering** happens at multiple levels simultaneously: the JIT compiler (Concept 4) can reorder/eliminate loads and stores it determines are safe for a single thread; the CPU's out-of-order execution engine can further reorder instructions at runtime; and even the memory subsystem itself can make stores visible to other cores in a different order than the issuing core executed them, unless a **memory barrier / fence** instruction is used to force ordering.
+- **Instruction reordering** happens at multiple levels simultaneously: the JIT compiler (Concept 4: The Execution Engine — Interpreter, JIT Compiler, and Tiered Compilation) can reorder/eliminate loads and stores it determines are safe for a single thread; the CPU's out-of-order execution engine can further reorder instructions at runtime; and even the memory subsystem itself can make stores visible to other cores in a different order than the issuing core executed them, unless a **memory barrier / fence** instruction is used to force ordering.
 
 **Memory barriers/fences** are the actual hardware mechanism that fixes this — a special CPU instruction that (depending on type) forces the store buffer to flush before proceeding, prevents certain reorderings across the fence, and/or forces a fresh read from a coherent, up-to-date memory state rather than a stale cache line. The Java constructs you'll learn next (`volatile`, `synchronized`) are, at the implementation level, exactly the JVM inserting the correct memory barriers at the correct points — the JMM is a portable, hardware-independent specification of *when* the JVM guarantees to insert such barriers, so you never have to reason about MESI or store buffers directly in Java code.
 
 ### 4. Connection to Concepts 3–6
 
-- Concept 3 established that per-thread stack data is inherently thread-safe (no other thread can even reach it) while Heap and Metaspace data is shared. This concept explains *precisely why* shared data being reachable by multiple threads is dangerous even without any race on *access* — the danger isn't just "two threads modifying the same field simultaneously," it's that **even non-simultaneous, sequential-looking access across threads has no visibility guarantee by default.**
-- Concept 4's JIT/C2 discussion of aggressive, speculative, profile-based optimization is directly implicated here: the compiler reordering instructions for single-thread performance is a *legitimate* optimization exactly because the JMM, absent synchronization, only promises correctness from a single thread's own perspective — this concept is the reason the JMM had to be formally specified at all, so compiler-writers know exactly which reorderings are and aren't allowed to affect observable cross-thread behavior.
-- Concept 5/6 mentioned GC's own internal use of memory barriers (SATB write barriers in G1, load barriers in ZGC) — those are, in fact, real-world *instances* of exactly the visibility/ordering-control mechanism this concept is now naming and explaining generally. The GC engineers had to solve this same visibility problem to keep concurrent marking correct; the JMM is what tells *you*, the Java programmer, how to solve the analogous problem in your own multithreaded code.
+- Concept 3 (JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) established that per-thread stack data is inherently thread-safe (no other thread can even reach it) while Heap and Metaspace data is shared. This concept explains *precisely why* shared data being reachable by multiple threads is dangerous even without any race on *access* — the danger isn't just "two threads modifying the same field simultaneously," it's that **even non-simultaneous, sequential-looking access across threads has no visibility guarantee by default.**
+- The JIT/C2 discussion of aggressive, speculative, profile-based optimization in Concept 4 (The Execution Engine — Interpreter, JIT Compiler, and Tiered Compilation) is directly implicated here: the compiler reordering instructions for single-thread performance is a *legitimate* optimization exactly because the JMM, absent synchronization, only promises correctness from a single thread's own perspective — this concept is the reason the JMM had to be formally specified at all, so compiler-writers know exactly which reorderings are and aren't allowed to affect observable cross-thread behavior.
+- Concept 5 (Garbage Collection Fundamentals — Reachability, GC Roots, and Why Generational GC Exists)/6 mentioned GC's own internal use of memory barriers (SATB write barriers in G1, load barriers in ZGC) — those are, in fact, real-world *instances* of exactly the visibility/ordering-control mechanism this concept is now naming and explaining generally. The GC engineers had to solve this same visibility problem to keep concurrent marking correct; the JMM is what tells *you*, the Java programmer, how to solve the analogous problem in your own multithreaded code.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -637,7 +637,7 @@ This is precisely why this pattern (a plain boolean flag as a cross-thread signa
 
 - The **fix** for exactly this example (previewing the next concept) is declaring `ready` as `volatile` — this instructs the JVM to insert the appropriate memory barriers so that: (a) the write to `ready` in Thread A cannot be reordered ahead of the write to `data`, and is flushed to a globally visible state, and (b) Thread B's read of `ready` always fetches a fresh value and cannot be hoisted out of the loop, and — crucially — the JMM further guarantees that once Thread B observes `ready == true`, it is also guaranteed to see `data == 42`, because of the **happens-before** relationship `volatile` establishes (formalized fully in the next concept).
 - Without any such synchronization, the JVM specification technically permits Thread B's loop to **spin forever**, even though this rarely happens in practice on common hardware for very simple loops — but "rarely happens on my machine today" is not a correctness guarantee, and is exactly the kind of bug that becomes a multi-day production incident when it does surface.
-- This is a fundamentally different class of bug from a **race condition on shared mutable state causing wrong values** (like the `globalCount++` non-atomicity mentioned back in Concept 3) — visibility/reordering bugs can occur even with operations that are individually "safe" in isolation (a single boolean flag write is atomic!), because the problem isn't atomicity, it's *whether and when* the write becomes observable to another thread at all.
+- This is a fundamentally different class of bug from a **race condition on shared mutable state causing wrong values** (like the `globalCount++` non-atomicity mentioned back in Concept 3: JVM Runtime Memory Areas — Heap, Stack, Metaspace, PC Register, Native Method Stack) — visibility/reordering bugs can occur even with operations that are individually "safe" in isolation (a single boolean flag write is atomic!), because the problem isn't atomicity, it's *whether and when* the write becomes observable to another thread at all.
 
 ### 7. Common misconceptions
 
@@ -661,7 +661,7 @@ This is precisely why this pattern (a plain boolean flag as a cross-thread signa
 
 ### 1. The problem it solves
 
-Concept 7 established the danger but deliberately gave you no fix — you now know writes can fail to become visible, and can be reordered relative to each other, from another thread's point of view. But knowing there's a hazard isn't enough to write correct code; you need a **precise, formal rule** that tells you, for any two specific operations in your program, whether one is *guaranteed* to be visible/ordered relative to another.
+Concept 7 (The Java Memory Model — The Visibility Problem and Reordering) established the danger but deliberately gave you no fix — you now know writes can fail to become visible, and can be reordered relative to each other, from another thread's point of view. But knowing there's a hazard isn't enough to write correct code; you need a **precise, formal rule** that tells you, for any two specific operations in your program, whether one is *guaranteed* to be visible/ordered relative to another.
 
 Without such a rule, every discussion of "is this code thread-safe" would be hand-wavy — "it should be fine because the CPU probably flushes writes quickly" is not an engineering answer. The JMM needed a single, unifying, formally-defined relation that every synchronization primitive in Java (`volatile`, `synchronized`, locks, thread start/join, atomics) plugs into consistently. That relation is called **happens-before**.
 
@@ -678,7 +678,7 @@ The JMM defines happens-before via a **fixed set of rules** — you don't get to
 
 - **Program order rule**: within a *single thread*, each action happens-before every subsequent action in that thread's own program order. (This is what you'd naively assume always applies — but note it *only* applies within one thread; it says nothing about visibility to *other* threads on its own.)
 - **Monitor lock rule**: an **unlock** on a monitor (i.e., exiting a `synchronized` block) happens-before every subsequent **lock** on that *same* monitor (i.e., entering a `synchronized` block on the same object) by any thread. This is what makes `synchronized` work as a visibility mechanism, not just a mutual-exclusion mechanism.
-- **Volatile variable rule**: a **write** to a `volatile` field happens-before every subsequent **read** of that *same* field by any thread. This is what makes `volatile` fix the exact `ready`/`data` example from Concept 7.
+- **Volatile variable rule**: a **write** to a `volatile` field happens-before every subsequent **read** of that *same* field by any thread. This is what makes `volatile` fix the exact `ready`/`data` example from Concept 7 (The Java Memory Model — The Visibility Problem and Reordering).
 - **Thread start rule**: a call to `Thread.start()` happens-before any action in the started thread. (Everything the parent thread did before calling `start()` is guaranteed visible to the new thread.)
 - **Thread join rule**: every action in a thread happens-before another thread successfully returns from a `join()` on that thread. (Everything the child thread did is guaranteed visible to whoever joined it.)
 - **Transitivity**: if X happens-before Y, and Y happens-before Z, then **X happens-before Z** — even if X and Z have no *direct* rule connecting them. This is what lets you chain guarantees across multiple threads and multiple synchronization points.
@@ -686,7 +686,7 @@ The JMM defines happens-before via a **fixed set of rules** — you don't get to
 
 ### 3. How it works internally — connecting rules to memory barriers
 
-Concept 7 explained that memory barriers are the hardware mechanism that actually forces store-buffer flushes and prevents reordering. **Happens-before is the JMM's abstract, portable specification of *when* the JVM must insert such barriers** — the JVM implementation (on any given CPU architecture) is responsible for translating each happens-before-establishing action into the correct concrete barrier instructions for that hardware:
+Concept 7 (The Java Memory Model — The Visibility Problem and Reordering) explained that memory barriers are the hardware mechanism that actually forces store-buffer flushes and prevents reordering. **Happens-before is the JMM's abstract, portable specification of *when* the JVM must insert such barriers** — the JVM implementation (on any given CPU architecture) is responsible for translating each happens-before-establishing action into the correct concrete barrier instructions for that hardware:
 
 - A `volatile` write compiles to a store followed by a barrier that prevents it from being reordered with subsequent volatile operations, and forces the store to become visible (not stuck in a store buffer indefinitely).
 - A `volatile` read compiles to a load preceded by a barrier that prevents it from being reordered with prior volatile operations, and forces a fresh read rather than a cached/hoisted one.
@@ -694,9 +694,9 @@ Concept 7 explained that memory barriers are the hardware mechanism that actuall
 
 This is precisely why happens-before rules are always phrased around specific *paired actions* (unlock↔lock, volatile-write↔volatile-read, start↔first-action, last-action↔join) — each pairing corresponds to a concrete barrier-insertion point the JVM can implement, on every supported architecture, regardless of how strong or weak that architecture's native memory model is.
 
-### 4. Connection to Concept 7
+### 4. Connection to Concept 7 (The Java Memory Model — The Visibility Problem and Reordering)
 
-Concept 7's `ready`/`data` example was broken specifically because **no happens-before relationship existed** between `writer()`'s actions and `reader()`'s actions — `ready` and `data` were plain fields, so none of the JMM's rules applied, leaving the JVM free to reorder and delay visibility arbitrarily. Fixing it is now precise, not hand-wavy: declare `ready` as `volatile`. By the **volatile variable rule**, the write `ready = true` happens-before the read that observes `ready == true`. By **program order** within Thread A, `data = 42` happens-before `ready = true`. By **transitivity**, `data = 42` (in Thread A) happens-before the read of `data` in Thread B that occurs after observing `ready == true` — **guaranteeing** Thread B sees `data == 42`, not the stale `0`. This is the exact mechanism, not a coincidence of hardware behavior — the chain of three rules (program order → volatile → transitivity) is what makes it provably correct on every JVM, every architecture, forever.
+The `ready`/`data` example from Concept 7 (The Java Memory Model — The Visibility Problem and Reordering) was broken specifically because **no happens-before relationship existed** between `writer()`'s actions and `reader()`'s actions — `ready` and `data` were plain fields, so none of the JMM's rules applied, leaving the JVM free to reorder and delay visibility arbitrarily. Fixing it is now precise, not hand-wavy: declare `ready` as `volatile`. By the **volatile variable rule**, the write `ready = true` happens-before the read that observes `ready == true`. By **program order** within Thread A, `data = 42` happens-before `ready = true`. By **transitivity**, `data = 42` (in Thread A) happens-before the read of `data` in Thread B that occurs after observing `ready == true` — **guaranteeing** Thread B sees `data == 42`, not the stale `0`. This is the exact mechanism, not a coincidence of hardware behavior — the chain of three rules (program order → volatile → transitivity) is what makes it provably correct on every JVM, every architecture, forever.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -725,7 +725,7 @@ Happens-before chain, explicitly:
 3. **Program order rule** (within Thread B): (3) that read of `readyVolatile` happens-before (4) `System.out.println(data)`.
 4. **Transitivity**: chaining 1 → 2 → 3, we get (1) happens-before (4) — **guaranteed**. Thread B's print is guaranteed to observe `data == 42`.
 
-Notice what changed from Concept 7's broken version: **only `readyVolatile` itself needed to become `volatile`** — `data` stays a plain field. This surprises people, but it's correct: `data`'s write doesn't need its *own* direct synchronization, because it "rides along" transitively through its program-order relationship to the volatile write, and the volatile read's program-order relationship to the subsequent read of `data`. This pattern — one `volatile` flag "publishing" a whole batch of previously-written plain fields — is extremely common in real code (e.g., safely publishing an immutable object built with several plain-field writes, then assigned to a single `volatile` reference).
+Notice what changed from the broken version in Concept 7 (The Java Memory Model — The Visibility Problem and Reordering): **only `readyVolatile` itself needed to become `volatile`** — `data` stays a plain field. This surprises people, but it's correct: `data`'s write doesn't need its *own* direct synchronization, because it "rides along" transitively through its program-order relationship to the volatile write, and the volatile read's program-order relationship to the subsequent read of `data`. This pattern — one `volatile` flag "publishing" a whole batch of previously-written plain fields — is extremely common in real code (e.g., safely publishing an immutable object built with several plain-field writes, then assigned to a single `volatile` reference).
 
 ### 6. Memory/thread interactions
 
@@ -757,28 +757,28 @@ Notice what changed from Concept 7's broken version: **only `readyVolatile` itse
 
 ### 1. The problem it solves
 
-Concept 8 gave you the volatile-variable happens-before rule abstractly. But in practice, `volatile` gets **misused constantly** — people reach for it as a general-purpose "make this thread-safe" keyword, and it isn't one. The real problem this concept solves: **precisely delineating what `volatile` guarantees, what it explicitly does *not*, and demonstrating both a case where it's the exactly correct tool and a case where it looks sufficient but silently isn't.** Interviewers probe this constantly because it's where the most subtle production bugs live — code that "looks synchronized" but has a gap.
+Concept 8 (The `happens-before` Relationship) gave you the volatile-variable happens-before rule abstractly. But in practice, `volatile` gets **misused constantly** — people reach for it as a general-purpose "make this thread-safe" keyword, and it isn't one. The real problem this concept solves: **precisely delineating what `volatile` guarantees, what it explicitly does *not*, and demonstrating both a case where it's the exactly correct tool and a case where it looks sufficient but silently isn't.** Interviewers probe this constantly because it's where the most subtle production bugs live — code that "looks synchronized" but has a gap.
 
 ### 2. The concept, completely
 
 `volatile` is a field modifier that gives you exactly two things, and nothing more:
 
-1. **Visibility** — per the volatile variable happens-before rule (Concept 8): a write to a volatile field is guaranteed visible to any thread that subsequently reads that same field.
-2. **Ordering (no reordering across volatile boundaries)** — the JVM will not reorder other memory operations across a volatile read or write. Concretely: any read/write that appears *before* a volatile write in program order cannot be reordered to *after* it; any read/write that appears *after* a volatile read cannot be reordered to *before* it. This is what let the plain `data` field "ride along" safely in Concept 8's example — the JVM is barred from moving `data = 42` to after `readyVolatile = true`.
+1. **Visibility** — per the volatile variable happens-before rule (Concept 8: The `happens-before` Relationship): a write to a volatile field is guaranteed visible to any thread that subsequently reads that same field.
+2. **Ordering (no reordering across volatile boundaries)** — the JVM will not reorder other memory operations across a volatile read or write. Concretely: any read/write that appears *before* a volatile write in program order cannot be reordered to *after* it; any read/write that appears *after* a volatile read cannot be reordered to *before* it. This is what let the plain `data` field "ride along" safely in the example from Concept 8 (The `happens-before` Relationship) — the JVM is barred from moving `data = 42` to after `readyVolatile = true`.
 
 What `volatile` does **not** give you:
 
 - **Atomicity for compound operations.** `count++` is really three steps: read `count`, add 1, write `count`. `volatile` makes each individual read and each individual write visible/ordered — but two threads can still interleave *between* the read and the write of different threads' increments, causing a **lost update**. `volatile` does nothing to prevent this interleaving.
 - **Mutual exclusion.** Nothing about `volatile` prevents two threads from executing concurrently; it only affects visibility/ordering of that one field.
-- **Guarantees about *other* variables' consistency relative to each other**, beyond what program order + transitivity naturally provides (as in Concept 8's example) — it's specifically about the one field it's applied to (plus whatever "rides along" via happens-before chaining).
+- **Guarantees about *other* variables' consistency relative to each other**, beyond what program order + transitivity naturally provides, as in the example from Concept 8 (The `happens-before` Relationship) — it's specifically about the one field it's applied to (plus whatever "rides along" via happens-before chaining).
 
 ### 3. How it works internally
 
 Every read of a `volatile` field is compiled with a preceding **load barrier** (also called an acquire barrier) that prevents reordering of subsequent operations before it, and ensures a fresh, non-cached read. Every write is compiled with a following **store barrier** (a release barrier) that flushes the write and prevents preceding operations from being reordered after it. On x86 (a relatively strong memory model), this often compiles down to fairly cheap instructions (a plain store might already have adequate ordering on x86, with an explicit fence sometimes only needed for the store case); on architectures with weaker memory models (like ARM), the JVM must insert more explicit fence instructions to achieve the same guarantee — this is a concrete illustration of why the JMM is specified abstractly, letting each JVM/architecture combination implement the guarantee correctly with whatever instructions that hardware requires.
 
-### 4. Connection to Concept 8
+### 4. Connection to Concept 8 (The `happens-before` Relationship)
 
-This concept is a direct, practical application of the volatile-variable happens-before rule from Concept 8, now stress-tested against a case designed to break naive intuitions: **double-checked locking (DCL)** for lazy singleton initialization — historically one of the most famous broken-then-fixed patterns in Java concurrency, and a direct, concrete demonstration of *why* the ordering guarantee (not just visibility) matters.
+This concept is a direct, practical application of the volatile-variable happens-before rule from Concept 8 (The `happens-before` Relationship), now stress-tested against a case designed to break naive intuitions: **double-checked locking (DCL)** for lazy singleton initialization — historically one of the most famous broken-then-fixed patterns in Java concurrency, and a direct, concrete demonstration of *why* the ordering guarantee (not just visibility) matters.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -801,7 +801,7 @@ class Singleton {
 }
 ```
 
-This looks reasonable: check without locking (fast path once initialized), lock and check again only if it looks uninitialized (avoiding the lock's cost on every call), assign once. The bug is in step (3), and it connects directly back to the **object creation internals** discussed earlier: `instance = new Singleton()` is not a single atomic action. Recall the constructor sequence — allocate memory, zero fields, run the constructor body, *then* the reference becomes fully valid. Critically, the compiler/CPU is permitted to **reorder the assignment of the reference to `instance` to happen *before* the constructor has finished running** (this is legal because, absent synchronization on `instance` itself, nothing forbids it — this is exactly the Concept 7 reordering hazard, now manifesting inside object construction). 
+This looks reasonable: check without locking (fast path once initialized), lock and check again only if it looks uninitialized (avoiding the lock's cost on every call), assign once. The bug is in step (3), and it connects directly back to the **object creation internals** discussed earlier: `instance = new Singleton()` is not a single atomic action. Recall the constructor sequence — allocate memory, zero fields, run the constructor body, *then* the reference becomes fully valid. Critically, the compiler/CPU is permitted to **reorder the assignment of the reference to `instance` to happen *before* the constructor has finished running** (this is legal because, absent synchronization on `instance` itself, nothing forbids it — this is exactly the reordering hazard from Concept 7: The Java Memory Model — The Visibility Problem and Reordering, now manifesting inside object construction). 
 
 Concretely: Thread A enters the `synchronized` block, and while constructing the `Singleton` object, the reference to the not-yet-fully-initialized object could become visible in `instance` *before* the constructor body finishes. If Thread B, at that exact moment, executes step (1) — the **unsynchronized** first check — it can see `instance != null` and return a reference to a **half-constructed object**, whose fields might still hold default zero values rather than the values the constructor was supposed to set. This is a direct, real-world instance of the "this-escapes-during-construction" hazard first mentioned when covering object creation.
 
@@ -845,7 +845,7 @@ Now, by the volatile ordering guarantee, the write to `instance` (making the ref
 - *"Does `volatile` make `count++` thread-safe?"* — no — atomicity for compound read-modify-write operations is a separate concern; `volatile` doesn't provide it.
 - *"If `synchronized` already provides visibility and ordering, why does the outer unsynchronized check in DCL still need `volatile`?"* — because the outer check deliberately bypasses the lock (that's the entire performance optimization); a read outside a `synchronized` block participates in no happens-before relationship unless the field itself is volatile.
 - *"Was double-checked locking always broken, or did something change?"* — before Java 5, `volatile`'s specification didn't provide the no-reordering guarantee strongly enough, so DCL was broken even with `volatile`; JSR-133 (the Java 5 JMM rewrite) is what made the `volatile`-based fix actually correct.
-- *"What's a simpler alternative to DCL that avoids this whole class of bug?"* — the initialization-on-demand holder idiom (a static nested class, relying on the class-initialization happens-before/thread-safety guarantee from Concept 2) or an `enum`-based singleton — both sidestep manual double-checked locking entirely by leaning on JVM-guaranteed class initialization semantics instead.
+- *"What's a simpler alternative to DCL that avoids this whole class of bug?"* — the initialization-on-demand holder idiom (a static nested class, relying on the class-initialization happens-before/thread-safety guarantee from Concept 2: The Class Loading Pipeline — Loading, Linking, Initialization) or an `enum`-based singleton — both sidestep manual double-checked locking entirely by leaning on JVM-guaranteed class initialization semantics instead.
 
 ---
 
@@ -853,7 +853,7 @@ Now, by the volatile ordering guarantee, the write to `instance` (making the ref
 
 ### 1. The problem it solves
 
-`volatile` (Concept 9) solves visibility/ordering for a single field, but it explicitly does **not** solve two things real programs need constantly:
+`volatile` (Concept 9: `volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking) solves visibility/ordering for a single field, but it explicitly does **not** solve two things real programs need constantly:
 
 - **Atomicity of compound operations** — a sequence of multiple reads/writes that must appear to happen as one indivisible unit from every other thread's perspective (e.g., "check the balance, then withdraw" must not be interleaved by another thread's withdrawal).
 - **Mutual exclusion** — ensuring only one thread executes a given critical section at a time, so that even non-atomic, multi-step invariants (like "the sum of two linked fields must always be consistent") are never observed in a torn, in-progress state by another thread.
@@ -873,7 +873,7 @@ synchronized (someObject) {
 Entering this block means **acquiring** `someObject`'s monitor; leaving it (normally or via exception) means **releasing** it. The JVM guarantees:
 
 1. **Mutual exclusion**: only one thread can hold a given object's monitor at a time; any other thread attempting to acquire it **blocks** until the holder releases it.
-2. **Happens-before via the monitor lock rule** (Concept 8): release happens-before every subsequent acquire of that *same* monitor — giving you both correctness properties (exclusion *and* visibility) from a single mechanism.
+2. **Happens-before via the monitor lock rule** (Concept 8: The `happens-before` Relationship): release happens-before every subsequent acquire of that *same* monitor — giving you both correctness properties (exclusion *and* visibility) from a single mechanism.
 3. **Reentrancy**: if a thread already holds a monitor, it can acquire it *again* (e.g., calling another `synchronized` method on the same object from within a `synchronized` block already holding that lock) without blocking on itself — the JVM tracks a per-thread **hold count**, incrementing on each nested acquire and decrementing on each release, only truly releasing the monitor to other threads when the count returns to zero. Without reentrancy, a thread would deadlock against itself the moment a `synchronized` method called another `synchronized` method on the same object.
 
 At the bytecode level, `synchronized` blocks compile to explicit `monitorenter` and `monitorexit` instructions bracketing the block (with the compiler inserting extra `monitorexit` calls on exception paths, to guarantee the lock is always released even if the critical section throws). `synchronized` *methods* don't use these instructions directly — instead, the method is flagged with an `ACC_SYNCHRONIZED` bit in its metadata, and the JVM's method-invocation machinery performs the monitor acquire/release automatically around the call.
@@ -888,11 +888,11 @@ Naively, every `synchronized` block would require a full OS-level mutex — expe
 
 This escalation is exactly why `synchronized` is often nearly free in the common uncontended case, despite historically having a reputation for being "slow" — that reputation stems from pre-Java-6 JVMs, before lightweight locking and biased locking existed, when *every* `synchronized` block always paid heavyweight-lock cost.
 
-### 4. Connection to Concepts 8 and 9, and to object creation
+### 4. Connection to Concepts 8 (The `happens-before` Relationship) and 9 (`volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking), and to object creation
 
-- This is the full mechanical explanation behind Concept 8's **monitor lock rule** — now you know it's implemented via mark-word-based CAS operations (lightweight) or OS mutexes (heavyweight), not some abstract magic.
+- This is the full mechanical explanation behind the **monitor lock rule** from Concept 8 (The `happens-before` Relationship) — now you know it's implemented via mark-word-based CAS operations (lightweight) or OS mutexes (heavyweight), not some abstract magic.
 - Directly extends the **object header / mark word** concept introduced during object creation — the mark word is now revealed to be a multi-purpose field: GC age bits, hash code, *and* lock state (biased/thin/fat), all packed into the same header word, switching interpretation depending on the lock state encoded there.
-- Complements `volatile` (Concept 9) precisely: `volatile` gives you visibility/ordering for a *single field*, cheaply, with no mutual exclusion; `synchronized` gives you *both* mutual exclusion and visibility/ordering, for an entire *block of code* (potentially touching many fields), at a higher (though often still small, thanks to escalation) cost.
+- Complements `volatile` (Concept 9: `volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking) precisely: `volatile` gives you visibility/ordering for a *single field*, cheaply, with no mutual exclusion; `synchronized` gives you *both* mutual exclusion and visibility/ordering, for an entire *block of code* (potentially touching many fields), at a higher (though often still small, thanks to escalation) cost.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -931,7 +931,7 @@ class Account {
 - **"synchronized(this) and a synchronized instance method behave identically, always."** Mostly true (both lock on the instance) — but `synchronized` **static** methods lock on the `Class` object (the class's `Class` instance) rather than `this` — a very common trick-question distinction; mixing a `synchronized` static method and a `synchronized` instance method gives you *two different locks*, providing no mutual exclusion between them.
 - **"If a thread calls a synchronized method from within another synchronized method on a different object, it will deadlock against itself."** Wrong in general — reentrancy only applies to the *same* monitor; acquiring a **different** object's lock while already holding one is fine (that's normal lock nesting), it just means you now hold two locks simultaneously — the actual deadlock risk here is about lock **ordering** across threads, a separate topic (two threads acquiring the same two locks in opposite order).
 - **"synchronized guarantees fairness — the longest-waiting thread gets the lock next."** Wrong — Java's intrinsic locks are, by default, **not guaranteed fair**; a newly-arriving thread can, in principle, acquire a lock ahead of a thread that's been waiting longer (this is precisely one reason `java.util.concurrent.locks.ReentrantLock`, with its optional fairness mode, exists as an alternative).
-- **"synchronized blocks and volatile are redundant with each other — pick one."** Wrong — they solve overlapping but distinct problems (mutual exclusion + visibility for a block of code, vs. visibility/ordering only for a single field) and are frequently used together (as in the double-checked locking example from Concept 9).
+- **"synchronized blocks and volatile are redundant with each other — pick one."** Wrong — they solve overlapping but distinct problems (mutual exclusion + visibility for a block of code, vs. visibility/ordering only for a single field) and are frequently used together (as in the double-checked locking example from Concept 9: `volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking).
 
 ### 8. Interview-level questions on this
 
@@ -948,15 +948,15 @@ class Account {
 
 ### 1. The problem it solves
 
-`synchronized` (Concept 10) solves mutual exclusion and visibility, but it has real, structural limitations that become painful in demanding concurrent code:
+`synchronized` (Concept 10: `synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation) solves mutual exclusion and visibility, but it has real, structural limitations that become painful in demanding concurrent code:
 
 - **No fairness control** — you can't choose "let the longest-waiting thread go next," which matters for avoiding starvation under sustained contention.
 - **No non-blocking option** — if you can't get the lock, you *must* block; there's no way to "try for the lock, and if unavailable, do something else instead" without extra machinery.
 - **No timeout** — you can't say "wait up to 500ms for this lock, then give up."
 - **No interruptibility while waiting** — a thread blocked on `synchronized` cannot be interrupted out of that wait.
-- **Heavyweight even at the language level for simple counters** — protecting a single counter increment with a full `synchronized` block, when the escalation from Concept 10 doesn't fully apply (e.g., under real contention), is more machinery than the problem needs.
+- **Heavyweight even at the language level for simple counters** — protecting a single counter increment with a full `synchronized` block, when the escalation from Concept 10 (`synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation) doesn't fully apply (e.g., under real contention), is more machinery than the problem needs.
 
-`java.util.concurrent` (JUC), introduced in Java 5 alongside the JSR-133 JMM rewrite that fixed `volatile`/DCL (Concept 9), solves these with two complementary tools: **`Lock` implementations** (like `ReentrantLock`) for flexible, feature-rich locking, and **atomic classes** (like `AtomicInteger`) for lock-free, single-variable compound operations.
+`java.util.concurrent` (JUC), introduced in Java 5 alongside the JSR-133 JMM rewrite that fixed `volatile`/DCL (Concept 9: `volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking), solves these with two complementary tools: **`Lock` implementations** (like `ReentrantLock`) for flexible, feature-rich locking, and **atomic classes** (like `AtomicInteger`) for lock-free, single-variable compound operations.
 
 ### 2. The concept, completely
 
@@ -991,7 +991,7 @@ An explicit, object-based lock (not tied to `synchronized`'s implicit per-object
 - `tryLock(timeout, unit)` — attempt with a bounded wait.
 - `lockInterruptibly()` — a blocking acquire that can be interrupted.
 - **Optional fairness** — `new ReentrantLock(true)` constructs a *fair* lock, where waiting threads are granted the lock in roughly FIFO order (at a real throughput cost, since fairness prevents some optimizations `synchronized`/unfair locks can use).
-- Still **reentrant** (hence the name) — same hold-count mechanism conceptually as `synchronized`'s reentrancy from Concept 10.
+- Still **reentrant** (hence the name) — same hold-count mechanism conceptually as `synchronized`'s reentrancy from Concept 10 (`synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation).
 
 ### 3. How it works internally — CAS and the ABA problem
 
@@ -999,11 +999,11 @@ CAS is implemented via a real CPU instruction (`CMPXCHG` on x86, load-linked/sto
 
 A subtle CAS hazard worth knowing: the **ABA problem**. CAS only checks "is the current value still equal to what I expected" — it cannot detect if the value was changed away from A, to B, and then *back* to A by other threads in between your read and your CAS. For a simple counter this is harmless (A back to A means the counter is genuinely correct), but for structures like lock-free stacks/linked lists, "the pointer is back to the same address" can mask a structural change (the underlying node was freed and a *new*, different node happens to reuse the same reference) — leading to subtle corruption. Real lock-free data structure implementations guard against this with versioned/stamped references (`AtomicStampedReference`) that CAS both a value and an accompanying version counter together, so "the same value" can be distinguished from "the same value, but it changed and changed back."
 
-### 4. Connection to Concepts 8, 9, and 10
+### 4. Connection to Concepts 8 (The `happens-before` Relationship), 9 (`volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking), and 10 (`synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation)
 
-- CAS-based atomics still rely on the JMM's happens-before machinery under the hood: a successful `compareAndSet` establishes the same kind of happens-before relationship as a volatile write (in fact, `Atomic*` classes internally use volatile-backed fields) — a successful CAS write happens-before a subsequent read of that atomic by another thread, exactly analogous to Concept 8's volatile rule, just now bundled with atomicity for the compound update too.
-- `ReentrantLock` is a direct, more flexible alternative to the intrinsic-lock mechanics from Concept 10 — same core guarantees (mutual exclusion + happens-before via a lock's acquire/release, which is itself one of the JMM's recognized happens-before rules, generalizing the monitor lock rule to `Lock` implementations broadly), delivered via library code (AQS) rather than JVM-baked-in bytecode instructions (`monitorenter`/`monitorexit`).
-- This directly closes the gap Concept 9 flagged: `volatile` alone can't make `count++` thread-safe — `AtomicInteger` is precisely the tool built for that exact situation, without needing a full `synchronized` block.
+- CAS-based atomics still rely on the JMM's happens-before machinery under the hood: a successful `compareAndSet` establishes the same kind of happens-before relationship as a volatile write (in fact, `Atomic*` classes internally use volatile-backed fields) — a successful CAS write happens-before a subsequent read of that atomic by another thread, exactly analogous to the volatile rule from Concept 8 (The `happens-before` Relationship), just now bundled with atomicity for the compound update too.
+- `ReentrantLock` is a direct, more flexible alternative to the intrinsic-lock mechanics from Concept 10 (`synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation) — same core guarantees (mutual exclusion + happens-before via a lock's acquire/release, which is itself one of the JMM's recognized happens-before rules, generalizing the monitor lock rule to `Lock` implementations broadly), delivered via library code (AQS) rather than JVM-baked-in bytecode instructions (`monitorenter`/`monitorexit`).
+- This directly closes the gap Concept 9 (`volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking) flagged: `volatile` alone can't make `count++` thread-safe — `AtomicInteger` is precisely the tool built for that exact situation, without needing a full `synchronized` block.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -1055,9 +1055,9 @@ No lost updates occurred despite full concurrent access — `sell` used lock-fre
 ### 7. Common misconceptions
 
 - **"CAS-based atomics are always faster than `synchronized`."** Not universally true — under low/moderate contention, yes, typically faster (no OS involvement); under very high contention, CAS-retry storms can perform worse than a well-escalated lock that parks waiting threads instead of spinning.
-- **"`ReentrantLock` is strictly better than `synchronized`, so I should always use it."** Wrong — `synchronized` is simpler, less error-prone (automatic release), and the JVM's escalation (Concept 10) already makes the common case cheap; `ReentrantLock` earns its complexity only when you specifically need its extra features (tryLock, fairness, interruptibility, timed waits).
+- **"`ReentrantLock` is strictly better than `synchronized`, so I should always use it."** Wrong — `synchronized` is simpler, less error-prone (automatic release), and the JVM's escalation (Concept 10: `synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation) already makes the common case cheap; `ReentrantLock` earns its complexity only when you specifically need its extra features (tryLock, fairness, interruptibility, timed waits).
 - **"CAS success means nothing else could have changed the value at any point."** Wrong — this is exactly the ABA problem: the value could have changed away and back, and a plain CAS cannot detect that intermediate change occurred, only that the *current* value matches your expected value.
-- **"AtomicInteger's operations don't need any happens-before reasoning, since they're 'atomic.'"** Incomplete — atomicity (no torn/interleaved updates) is a separate property from establishing visibility for *other*, unrelated variables; if you need other plain fields to be visible alongside an atomic update, you still need to reason about happens-before (e.g., via the atomic's own internal volatile semantics, similar to Concept 8's chaining pattern).
+- **"AtomicInteger's operations don't need any happens-before reasoning, since they're 'atomic.'"** Incomplete — atomicity (no torn/interleaved updates) is a separate property from establishing visibility for *other*, unrelated variables; if you need other plain fields to be visible alongside an atomic update, you still need to reason about happens-before (e.g., via the atomic's own internal volatile semantics, similar to the chaining pattern from Concept 8: The `happens-before` Relationship).
 - **"Lock-free means wait-free / guaranteed progress for every thread."** Wrong — lock-free (via CAS retries) guarantees *some* thread makes progress systemwide, but an individual thread can, in principle, retry many times if unlucky; true wait-free algorithms (guaranteeing every thread finishes in a bounded number of steps) are a stronger, rarer, and harder-to-achieve property.
 
 ### 8. Interview-level questions on this
@@ -1075,7 +1075,7 @@ No lost updates occurred despite full concurrent access — `sell` used lock-fre
 
 ### 1. The problem it solves
 
-Concept 9's double-checked-locking fix relied on `volatile` to prevent the *writing* thread from letting a half-constructed object's reference escape early. But there's a **second, independent** mechanism the JMM provides specifically for immutable (or effectively-immutable) objects — one that lets you publish a fully-constructed object to other threads **safely, without `volatile` or `synchronized` at all**, as long as you follow one specific rule: **make the relevant fields `final`.**
+The double-checked-locking fix from Concept 9 (`volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking) relied on `volatile` to prevent the *writing* thread from letting a half-constructed object's reference escape early. But there's a **second, independent** mechanism the JMM provides specifically for immutable (or effectively-immutable) objects — one that lets you publish a fully-constructed object to other threads **safely, without `volatile` or `synchronized` at all**, as long as you follow one specific rule: **make the relevant fields `final`.**
 
 The problem this solves precisely: without any special guarantee, a thread that receives a reference to an object *some other way* (not through a happens-before-connected volatile/lock — e.g., through a data structure that itself has no special synchronization, or simply because the reference "leaked" via some ordinary mechanism) could still see that object's fields in a **partially-initialized state** — even if the constructor had, from the constructing thread's own perspective, fully completed. `final` fields get a special, narrower, but very useful JMM guarantee that plugs exactly this gap for immutable data.
 
@@ -1083,7 +1083,7 @@ The problem this solves precisely: without any special guarantee, a thread that 
 
 The JMM's **final field guarantee**: if a field is declared `final` and the constructor doesn't let `this` escape during construction (no this-escape, as discussed in the object-creation concept), then **any thread that obtains a reference to the object *after* the constructor has finished is guaranteed to see the correctly-initialized value of that final field** — **without needing any `volatile`, `synchronized`, or other explicit synchronization** on the path by which that reference was obtained.
 
-This is a genuinely special, narrower rule than the general happens-before machinery from Concept 8 — it doesn't require a paired synchronization action at all; it's baked directly into what "correctly constructing a `final` field" means under the JMM. Internally, the JVM inserts a **freeze** (a special barrier specific to final fields) at the end of the constructor, right after the final field's value is set — this barrier ensures the write to the final field cannot be reordered to *after* the constructor returns (i.e., cannot be delayed past the point where the reference might become visible to another thread), regardless of what synchronization (if any) is used to actually hand off the reference afterward.
+This is a genuinely special, narrower rule than the general happens-before machinery from Concept 8 (The `happens-before` Relationship) — it doesn't require a paired synchronization action at all; it's baked directly into what "correctly constructing a `final` field" means under the JMM. Internally, the JVM inserts a **freeze** (a special barrier specific to final fields) at the end of the constructor, right after the final field's value is set — this barrier ensures the write to the final field cannot be reordered to *after* the constructor returns (i.e., cannot be delayed past the point where the reference might become visible to another thread), regardless of what synchronization (if any) is used to actually hand off the reference afterward.
 
 **The crucial caveat: this-escape voids the guarantee entirely.** If the constructor lets `this` leak to another thread *before* finishing (e.g., passing `this` to another object's method, registering `this` as a listener, or storing `this` into a static field, all from inside the constructor), the final-field guarantee is **not** honored for that leaked reference — a thread that receives the leaked `this` early could still see a not-yet-initialized final field, defeating the whole point. This is why "don't let `this` escape during construction" is one of the most repeated rules in Java concurrency writing — it's not a vague style preference, it's the literal precondition for this specific JMM guarantee to hold.
 
@@ -1093,11 +1093,11 @@ The freeze barrier is inserted specifically after the last write to a final fiel
 
 Contrast this precisely with a plain (non-final) field in the same object: the JMM makes **no such guarantee** for it — a plain field's write inside the constructor could, in principle, be reordered relative to the reference becoming visible elsewhere, unless some *other* mechanism (a volatile publish, a lock, or thread start/join) establishes the needed happens-before edge, exactly as covered in Concepts 7–9.
 
-### 4. Connection to Concepts 9 and object creation
+### 4. Connection to Concepts 9 (`volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking) and object creation
 
 - This is the deep reason **immutable objects are inherently easier to share safely across threads** — if every field of a class is `final` and the constructor never lets `this` escape, the object can be freely handed to any other thread through virtually any means (even a plain, non-volatile field, or a non-thread-safe collection) and every receiving thread is still guaranteed to see fully-initialized field values. This is a genuinely different, and in many ways stronger-feeling, safety property than what `volatile`/`synchronized` provide, precisely because it requires **no coordination at the publication site at all** — the guarantee lives entirely inside the constructor's discipline.
 - Directly recalls the object-creation concept's "this-escape" warning — that warning is now fully cashed out: this-escape isn't just "generally risky," it specifically and precisely **voids the final-field safe-publication guarantee**, the JMM's one guarantee that doesn't otherwise require synchronization.
-- Complements DCL (Concept 9): if `Singleton`'s fields were all `final` and its constructor didn't let `this` escape, part of the reasoning about safety would already be handled by this guarantee — though the `volatile` on the `instance` reference itself is still needed, since the final-field guarantee protects the *fields inside* the object, not the *reference to the object* being safely published to the `instance` variable itself.
+- Complements DCL (Concept 9: `volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking): if `Singleton`'s fields were all `final` and its constructor didn't let `this` escape, part of the reasoning about safety would already be handled by this guarantee — though the `volatile` on the `instance` reference itself is still needed, since the final-field guarantee protects the *fields inside* the object, not the *reference to the object* being safely published to the `instance` variable itself.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -1130,14 +1130,14 @@ class Publisher {
 ```
 
 1. Thread A calls `publish()`: the constructor runs, writing `x = 3` (1) and `y = 4` (2). Because both are `final` and there's no this-escape, the JVM inserts a freeze barrier right after these writes, before the constructor returns.
-2. `shared = new Point(3, 4)` (3) executes — note this reference assignment itself is a **plain, non-volatile write**. Normally (Concept 7), this alone would offer *no* visibility guarantee to another thread reading `shared` — and indeed, **whether Thread B ever sees this write at all is genuinely not guaranteed** without further synchronization (this part of the classic visibility problem is *not* fixed by final fields — final fields only protect what happens *after* a reference is legitimately observed, not whether it's observed at all).
+2. `shared = new Point(3, 4)` (3) executes — note this reference assignment itself is a **plain, non-volatile write**. Normally (Concept 7: The Java Memory Model — The Visibility Problem and Reordering), this alone would offer *no* visibility guarantee to another thread reading `shared` — and indeed, **whether Thread B ever sees this write at all is genuinely not guaranteed** without further synchronization (this part of the classic visibility problem is *not* fixed by final fields — final fields only protect what happens *after* a reference is legitimately observed, not whether it's observed at all).
 3. Suppose, through some other means, Thread B eventually does read `shared` and gets a non-null reference (e.g., due to a lucky cache flush, an unrelated synchronization elsewhere in the program, or simply because enough time passed) — the moment it holds that reference, the **final-field guarantee kicks in**: Thread B's read of `p.x` and `p.y` is guaranteed to observe `3` and `4`, never `0` (the default) or any other intermediate value, **regardless of how it obtained the reference** — even though the reference hand-off itself used no synchronization whatsoever.
 
 This distinction is subtle and exactly the kind of thing interviewers probe: **final fields guarantee that *if* you observe the reference, you see correctly-initialized contents — they do *not* guarantee that you *will* observe the reference at all.** For that second part (actual visibility of the reference itself), you're back to needing a `volatile` field, a lock, or thread start/join, exactly as covered in Concepts 7–9.
 
 ### 6. Memory/thread interactions
 
-- **Two separate guarantees, easy to conflate**: (a) "will Thread B ever see the reference `shared` become non-null" — a Concept 7/8 visibility question, requiring ordinary synchronization to guarantee; (b) "once Thread B has the reference, are the `final` fields inside correctly initialized" — the guarantee this concept describes, requiring *only* `final` + no this-escape, no additional synchronization needed. A program can have (b) but not (a) — exactly the example above.
+- **Two separate guarantees, easy to conflate**: (a) "will Thread B ever see the reference `shared` become non-null" — a Concept 7 (The Java Memory Model — The Visibility Problem and Reordering)/8 visibility question, requiring ordinary synchronization to guarantee; (b) "once Thread B has the reference, are the `final` fields inside correctly initialized" — the guarantee this concept describes, requiring *only* `final` + no this-escape, no additional synchronization needed. A program can have (b) but not (a) — exactly the example above.
 - **This-escape is the single failure mode that invalidates the whole guarantee** — a constructor doing something as innocuous-looking as `SomeRegistry.register(this)` as its last line breaks the guarantee for any thread that receives the reference via that registry, even though every field write happened textually before that line.
 - **Records** (Java 16+) get this guarantee automatically and by design — every component of a record is implicitly `final`, which is precisely why records are marketed as being safe to freely share across threads without extra synchronization (as long as, of course, their constructors don't let `this` escape either — the same caveat still applies).
 
@@ -1145,7 +1145,7 @@ This distinction is subtle and exactly the kind of thing interviewers probe: **f
 
 - **"`final` fields make the whole object safe to share across threads with zero synchronization anywhere, including the reference hand-off."** Wrong — this is the exact subtlety above: `final` protects field *contents* once the reference is observed, but does **not** guarantee the reference itself becomes visible to another thread without separate synchronization.
 - **"This guarantee works even if the constructor passes `this` to something else before finishing."** Wrong — this-escape voids the guarantee entirely for any reference obtained via that escape path, no matter how many fields are `final`.
-- **"Marking a field `final` is basically the same as making it `volatile` for safety purposes."** Wrong — they solve different halves of the problem: `volatile` helps guarantee the *reference itself* becomes visible in a properly ordered way; `final` guarantees the *contents* are correctly initialized once observed. Neither substitutes for the other; the DCL pattern from Concept 9 needs `volatile` specifically because it's protecting the reference's visibility/ordering, not field-content correctness within an already-immutable object.
+- **"Marking a field `final` is basically the same as making it `volatile` for safety purposes."** Wrong — they solve different halves of the problem: `volatile` helps guarantee the *reference itself* becomes visible in a properly ordered way; `final` guarantees the *contents* are correctly initialized once observed. Neither substitutes for the other; the DCL pattern from Concept 9 (`volatile` in Depth — Guarantees, Non-Guarantees, and Double-Checked Locking) needs `volatile` specifically because it's protecting the reference's visibility/ordering, not field-content correctness within an already-immutable object.
 - **"Only objects with all-final fields benefit from any of this."** Wrong — the guarantee applies per-field: even a class with a mix of `final` and non-final fields gets the safe-publication guarantee *for its final fields specifically*; the non-final fields get no such protection and need ordinary synchronization if they're mutated and need to be visible.
 - **"This is a rarely-relevant academic detail."** Wrong for practical purposes — it's the entire theoretical justification for why immutable value objects (Strings, boxed primitives, records, and well-designed immutable domain objects) are treated as inherently thread-safe to pass around freely in real, production concurrent code, which is an extremely common and important pattern.
 
@@ -1163,12 +1163,12 @@ This distinction is subtle and exactly the kind of thing interviewers probe: **f
 
 ### 1. The problem it solves
 
-Concept 10 gave you `synchronized` for mutual exclusion and visibility, but it left a real gap: **what does a thread do when it holds a lock but discovers the condition it actually needs isn't true yet?** Consider a producer-consumer queue: a consumer thread acquires the lock, checks "is there an item to consume?", and finds the queue empty. Its options, without any additional mechanism, are bad:
+Concept 10 (`synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation) gave you `synchronized` for mutual exclusion and visibility, but it left a real gap: **what does a thread do when it holds a lock but discovers the condition it actually needs isn't true yet?** Consider a producer-consumer queue: a consumer thread acquires the lock, checks "is there an item to consume?", and finds the queue empty. Its options, without any additional mechanism, are bad:
 
 - **Busy-wait while holding the lock** — spin-check in a loop without releasing the lock. This is catastrophic: since it still holds the monitor, **no producer thread can ever acquire the lock to add an item** — the consumer is holding the lock hostage while waiting for a condition only a *different* thread (needing that same lock) can fulfill. Guaranteed deadlock/livelock.
 - **Release the lock and busy-wait outside it, re-acquiring repeatedly to re-check** — technically avoids the deadlock, but wastes CPU constantly polling, and introduces a race window between "check" and "re-acquire" where the state could change again.
 
-Neither is acceptable for real production code. Java needs a way for a thread to say: **"release the lock, go to sleep, and wake me up specifically when someone signals that the condition might now be true"** — efficiently, without polling, and without permanently giving up its claim to re-check safely. `Object.wait()`/`notify()`/`notifyAll()` are exactly this mechanism, built directly into every object's monitor (the same monitor from Concept 10).
+Neither is acceptable for real production code. Java needs a way for a thread to say: **"release the lock, go to sleep, and wake me up specifically when someone signals that the condition might now be true"** — efficiently, without polling, and without permanently giving up its claim to re-check safely. `Object.wait()`/`notify()`/`notifyAll()` are exactly this mechanism, built directly into every object's monitor (the same monitor from Concept 10: `synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation).
 
 ### 2. The concept, completely
 
@@ -1199,9 +1199,9 @@ This is not a stylistic preference — it's required for correctness, for two in
 
 **Why `notify()` vs `notifyAll()` matters**: `notify()` wakes only one arbitrary waiting thread — if multiple different threads are waiting for *different* conditions on the *same* monitor (a common real scenario — e.g., some waiting for "not empty," others for "not full," on the same lock object), `notify()` might wake a thread whose specific condition still isn't satisfiable, while a thread whose condition *would* now be satisfiable stays asleep — a subtle, easy-to-introduce bug sometimes called a "missed signal" in practice. `notifyAll()` is safer by default (everyone re-checks their own condition in their own loop), at the cost of some wasted wake-ups/re-contention when only one waiter's condition actually became true — a real, deliberate throughput-vs-safety tradeoff.
 
-### 4. Connection to Concept 10
+### 4. Connection to Concept 10 (`synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation)
 
-`wait()`/`notify()` are not a separate synchronization primitive bolted onto Java — they're a direct extension of the **same monitor** every object already carries from Concept 10. This is precisely why you can only call them while holding the lock: `wait()` needs to know exactly which monitor to atomically release, and `notify()` needs to know exactly which monitor's waiting-thread set to signal. The reentrancy hold-count from Concept 10 is also relevant here: if a thread called `wait()` while holding the monitor with a hold count greater than 1 (nested `synchronized` blocks), `wait()` releases the monitor entirely (down to hold count 0) and, upon waking and re-acquiring, restores it back to the same hold count it had before — preserving reentrancy semantics correctly across the wait.
+`wait()`/`notify()` are not a separate synchronization primitive bolted onto Java — they're a direct extension of the **same monitor** every object already carries from Concept 10 (`synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation). This is precisely why you can only call them while holding the lock: `wait()` needs to know exactly which monitor to atomically release, and `notify()` needs to know exactly which monitor's waiting-thread set to signal. The reentrancy hold-count from Concept 10 (`synchronized` and Intrinsic Locks — Monitor Mechanics, Reentrancy, and Lock Escalation) is also relevant here: if a thread called `wait()` while holding the monitor with a hold count greater than 1 (nested `synchronized` blocks), `wait()` releases the monitor entirely (down to hold count 0) and, upon waking and re-acquiring, restores it back to the same hold count it had before — preserving reentrancy semantics correctly across the wait.
 
 ### 5. Step-by-step at runtime, with a concrete example
 
@@ -1242,7 +1242,7 @@ class BoundedQueue {
 
 ### 6. Memory/thread interactions
 
-- **`wait()`/`notify()` inherit the monitor's happens-before guarantees** — because both require holding the same lock, the JMM's monitor lock rule (Concept 8) applies across a wait/notify handoff too: everything Thread P wrote before calling `notifyAll()` (including `queue.add(item)`) is guaranteed visible to Thread C once it re-acquires the lock and resumes — no separate `volatile` needed for `queue` itself, since it's entirely protected by consistent use of the same monitor throughout.
+- **`wait()`/`notify()` inherit the monitor's happens-before guarantees** — because both require holding the same lock, the JMM's monitor lock rule (Concept 8: The `happens-before` Relationship) applies across a wait/notify handoff too: everything Thread P wrote before calling `notifyAll()` (including `queue.add(item)`) is guaranteed visible to Thread C once it re-acquires the lock and resumes — no separate `volatile` needed for `queue` itself, since it's entirely protected by consistent use of the same monitor throughout.
 - **Calling `wait()`/`notify()` outside a `synchronized` block on that object throws `IllegalMonitorStateException` immediately** — this is a deliberate, hard requirement, not a convention, precisely because the atomic release-and-suspend semantics of `wait()` only make sense if the calling thread genuinely holds the monitor to release in the first place.
 - **This entire mechanism has a modern, higher-level alternative**: `java.util.concurrent.locks.Condition` (obtained from a `ReentrantLock` via `newCondition()`) provides the same await/signal/signalAll semantics, but decoupled from intrinsic locks — allowing, notably, **multiple independent condition queues on a single lock** (e.g., a separate `Condition` for "not full" and a separate one for "not empty" on the same `ReentrantLock`), directly solving the `notify()`-wakes-the-wrong-waiter problem mentioned above without needing to fall back to `notifyAll()`'s broader wake-and-recheck-everyone approach.
 

@@ -1,6 +1,6 @@
 # Java OOP Mastery — Consolidated Notes
 
-*Senior-level Java OOP course notes: Lesson 1 through Part 13 (concepts only — interview questions, code review drills, and design decision drills omitted).*
+*Senior-level Java OOP course notes: Lesson 1 (Objects, Classes, State, Behavior, Identity, References) through Part 13 (Misconceptions Experienced Developers Know Beginners Often Get Wrong) (concepts only — interview questions, code review drills, and design decision drills omitted).*
 
 ---
 
@@ -238,7 +238,7 @@ record Money(BigDecimal amount, Currency currency) {
 
 ## Part 8: Composition
 
-**The problem:** `class Car extends Engine` — a `Car` is not an `Engine` (fails the IS-A test from Part 4); it's forced through inheritance purely to reuse `start()`, exposing `Engine`'s full API as if it were `Car`'s own, and locking in exactly one engine forever.
+**The problem:** `class Car extends Engine` — a `Car` is not an `Engine` (fails the IS-A test from Part 4: Inheritance); it's forced through inheritance purely to reuse `start()`, exposing `Engine`'s full API as if it were `Car`'s own, and locking in exactly one engine forever.
 
 **Core idea:** Composition models **HAS-A** via a field reference to a collaborator object; the containing class **delegates** work to it.
 
@@ -293,14 +293,14 @@ Swapping `PetrolEngine` for `ElectricEngine` requires zero changes to `Car`. Thi
 
 ### O — Open/Closed Principle
 **Bad:** `if/else` chain on `customerType` in `DiscountCalculator` — every new tier means editing existing, working code.
-**Fix:** `DiscountStrategy` interface + one implementation per tier (polymorphism, Part 5) — `DiscountCalculator` never changes when a new tier is added. **Open for extension, closed for modification.**
+**Fix:** `DiscountStrategy` interface + one implementation per tier (polymorphism, Part 5: Polymorphism) — `DiscountCalculator` never changes when a new tier is added. **Open for extension, closed for modification.**
 **Overapplication:** introducing a `Strategy` interface for something with no real, recurring variation is premature (YAGNI tension).
 
 ### L — Liskov Substitution Principle
 **Bad:** `Square extends Rectangle` overriding `setWidth`/`setHeight` to keep both equal — breaks code written correctly against `Rectangle`'s contract (independent width/height mutation).
 **Precise definition:** subtypes must be substitutable for their base types **without altering program correctness** — not just compiling, but behaving correctly.
 **Fix:** Model both as immutable `Shape` implementations exposing only `area()` — removing the mutable setters removes the contract that was being violated.
-**Generalizes to:** any subtype forced to override a method just to disable it (e.g., `Contractor.submitTimesheet()` from Part 4) is an LSP violation, not just a geometry-textbook case.
+**Generalizes to:** any subtype forced to override a method just to disable it (e.g., `Contractor.submitTimesheet()` from Part 4: Inheritance) is an LSP violation, not just a geometry-textbook case.
 
 ### I — Interface Segregation Principle
 **Bad:** Fat `Worker { work(); eat(); sleep(); }` forces `RobotWorker` to fake `eat()`/`sleep()` with thrown exceptions.
@@ -321,10 +321,10 @@ Swapping `PetrolEngine` for `ElectricEngine` requires zero changes to `Car`. Thi
 
 Each pattern: problem it solves → the pattern's shape → where it shows up in production → its trade-off.
 
-- **Strategy** — replaces type-based `if/else` for interchangeable algorithms with an interface + one implementation per variant (the `DiscountStrategy` example from Part 10). JDK example: `Comparator<T>`.
+- **Strategy** — replaces type-based `if/else` for interchangeable algorithms with an interface + one implementation per variant (the `DiscountStrategy` example from Part 10: SOLID). JDK example: `Comparator<T>`.
 - **Factory / Factory Method** — centralizes complex/conditional object-creation logic in one place (`PaymentFactory.create(type)`) instead of scattering `if/else` type-selection everywhere; Factory Method lets subclasses decide what to instantiate via an overridden creation method. Doesn't eliminate the conditional — relocates it to one maintainable spot.
-- **Builder** — solves telescoping constructors / unreadable long parameter lists for objects with many optional fields, especially immutable ones (Part 7); a nested `Builder` class accumulates values via chained calls, then `.build()` constructs the final immutable object. JDK example: `HttpClient.newBuilder()`.
-- **Template Method** — fixes a shared algorithm skeleton in a (often `final`) method in a superclass, with a few varying steps left `abstract` for subclasses to fill in. Avoids duplicating the shared steps across near-identical classes; relies on inheritance, so carries Part 4's fragile-base-class risk — Strategy (composition-based) is often preferred for the same "vary one part" problem today.
+- **Builder** — solves telescoping constructors / unreadable long parameter lists for objects with many optional fields, especially immutable ones (Part 7: Immutability); a nested `Builder` class accumulates values via chained calls, then `.build()` constructs the final immutable object. JDK example: `HttpClient.newBuilder()`.
+- **Template Method** — fixes a shared algorithm skeleton in a (often `final`) method in a superclass, with a few varying steps left `abstract` for subclasses to fill in. Avoids duplicating the shared steps across near-identical classes; relies on inheritance, so carries the fragile-base-class risk from Part 4 (Inheritance) — Strategy (composition-based) is often preferred for the same "vary one part" problem today.
 - **Observer** — decouples "something happened" from "everyone who needs to react" via a listener interface and a list of registered listeners the subject notifies, instead of hardcoding every reaction into the triggering class (OCP-friendly: new listeners are pure additions). JDK/Spring example: `ApplicationEventPublisher`/`@EventListener`.
 - **Decorator** — adds behavior (logging, caching, compression) to an object by wrapping it in another object implementing the same interface, avoiding a combinatorial explosion of subclasses for every combination of add-ons. JDK example: `new BufferedReader(new InputStreamReader(new FileInputStream(file)))`.
 - **Adapter** — translates an incompatible third-party/legacy interface into the shape your application expects, isolating vendor-specific quirks to one class. Distinct from Decorator: Adapter translates shape (behavior unchanged); Decorator adds behavior (shape unchanged).
@@ -339,12 +339,12 @@ Each pattern: problem it solves → the pattern's shape → where it shows up in
 
 A realistic Spring Boot slice (`Customer`, `Order`, `Product`, `Money`, `PaymentService`, `NotificationSender`, `InventoryService`, `OrderRepository`) demonstrates every principle above working together:
 
-- **Value objects** (`Money`, `OrderItem`) as immutable records with content-based equality (Parts 6, 7).
-- **Entities** (`Customer`, `Order`) with ID-based equality, enforced invariants inside their own methods (Tell, Don't Ask — Part 2), and defensive-copy getters.
-- **Interfaces** reserved for genuine architectural boundaries with real implementations and testing needs (`PaymentService`, `NotificationSender`, `InventoryService`, `OrderRepository`) — not for plain domain data classes (Part 3).
-- **Services** composing multiple narrow collaborators via constructor injection (Parts 8, 10 DIP) rather than absorbing every concern themselves (SRP, Part 10).
+- **Value objects** (`Money`, `OrderItem`) as immutable records with content-based equality (Parts 6: The `Object` Class and Equality, 7: Immutability).
+- **Entities** (`Customer`, `Order`) with ID-based equality, enforced invariants inside their own methods (Tell, Don't Ask — Part 2: Encapsulation), and defensive-copy getters.
+- **Interfaces** reserved for genuine architectural boundaries with real implementations and testing needs (`PaymentService`, `NotificationSender`, `InventoryService`, `OrderRepository`) — not for plain domain data classes (Part 3: Abstraction).
+- **Services** composing multiple narrow collaborators via constructor injection (Part 8: Composition, and DIP from Part 10: SOLID) rather than absorbing every concern themselves (SRP, Part 10: SOLID).
 - **DTOs** (`PlaceOrderRequest`, `OrderResponse`) guarding the API boundary so untrusted input never bypasses the domain object's own validation — a domain object with enforced invariants should never be deserialized directly from a request body.
-- **Narrow, named exceptions** per distinct failure mode, mirroring Part 4's IS-A discipline.
+- **Narrow, named exceptions** per distinct failure mode, mirroring the IS-A discipline from Part 4 (Inheritance).
 
 **The anti-pattern this design avoids:** a single ~300-line `OrderService.placeOrder(Map<String,Object>)` method mixing raw-map parsing, inline string-concatenated SQL (SQL-injection risk), a hardcoded Stripe URL, and inline email sending — violating encapsulation, abstraction, SRP, and testability simultaneously. The fix is exactly the decomposition above: real domain objects owning their own validation, injected abstractions at every genuine boundary, DTOs at the API edge, and a thin orchestrating service.
 
@@ -357,25 +357,25 @@ A realistic Spring Boot slice (`Customer`, `Order`, `Product`, `Money`, `Payment
 A consolidated list (each traces back to a part above where it's covered in depth):
 
 1. **OOP means using classes everywhere** — OOP is about modeling state+behavior+relationships properly, not maximizing class count; plain static utilities are fine when there's no state or invariant to own.
-2. **Encapsulation means private fields + getters/setters** — see Part 2.
-3. **Inheritance is always better for code reuse** — see Part 4.
-4. **Interfaces are always better than classes** — an interface only earns its place with real variation, a testing seam, or an architectural boundary (Part 3).
-5. **Every class should have an interface** — see Part 3's `AddressValidator` example.
-6. **More abstraction means better design** — see Part 3.
-7. **SOLID means smaller classes** — SRP is about reasons to change, not line/method count (Part 10).
-8. **Dependency injection automatically makes code loosely coupled** — DI ≠ DIP; injecting a concrete class is still tight coupling (Part 10).
-9. **Polymorphism only means method overriding** — overloading is compile-time polymorphism too (Part 5).
-10. **`==` and `equals()` are interchangeable** — see Part 6.
-11. **`final` makes an object immutable** — only prevents field reassignment (Part 7).
-12. **A record is always better than a normal class** — wrong for behavior-heavy or inheritance-needing classes (Part 7).
-13. **Composition means dependency injection** — composition is the structural relationship; DI is one wiring technique (Part 8).
-14. **Design patterns always improve code** — only when the pattern's originating problem is genuinely present (Part 11).
+2. **Encapsulation means private fields + getters/setters** — see Part 2 (Encapsulation).
+3. **Inheritance is always better for code reuse** — see Part 4 (Inheritance).
+4. **Interfaces are always better than classes** — an interface only earns its place with real variation, a testing seam, or an architectural boundary (Part 3: Abstraction).
+5. **Every class should have an interface** — see the `AddressValidator` example in Part 3 (Abstraction).
+6. **More abstraction means better design** — see Part 3 (Abstraction).
+7. **SOLID means smaller classes** — SRP is about reasons to change, not line/method count (Part 10: SOLID).
+8. **Dependency injection automatically makes code loosely coupled** — DI ≠ DIP; injecting a concrete class is still tight coupling (Part 10: SOLID).
+9. **Polymorphism only means method overriding** — overloading is compile-time polymorphism too (Part 5: Polymorphism).
+10. **`==` and `equals()` are interchangeable** — see Part 6 (The `Object` Class and Equality).
+11. **`final` makes an object immutable** — only prevents field reassignment (Part 7: Immutability).
+12. **A record is always better than a normal class** — wrong for behavior-heavy or inheritance-needing classes (Part 7: Immutability).
+13. **Composition means dependency injection** — composition is the structural relationship; DI is one wiring technique (Part 8: Composition).
+14. **Design patterns always improve code** — only when the pattern's originating problem is genuinely present (Part 11: Design Patterns Through OOP).
 15. **More classes means better OOP** — same error as #1 and #7; cohesion/coupling/correct modeling matter, not class count.
-16. **Getters and setters are always good** — fine for unconstrained data, a smell for invariant-bearing fields (Part 2).
-17. **Private constructors automatically make objects immutable** — only controls who can construct, not post-construction mutation (Part 7).
+16. **Getters and setters are always good** — fine for unconstrained data, a smell for invariant-bearing fields (Part 2: Encapsulation).
+17. **Private constructors automatically make objects immutable** — only controls who can construct, not post-construction mutation (Part 7: Immutability).
 18. **An abstract class is simply a class that cannot be instantiated** — non-instantiability is a side effect of an incomplete blueprint (partial implementation + unfinished contract), not the defining purpose.
 19. **Interfaces cannot contain implementation** — since Java 8, `default`/`static` methods can carry real implementation (e.g., `Comparator.reversed()`); interfaces still can't hold instance state, though.
 20. **Java does not support multiple inheritance** — true only for class implementation inheritance; a class can implement any number of interfaces (multiple inheritance of contract/default behavior).
-21. **Overloading is runtime polymorphism / Overriding is compile-time polymorphism** — exactly backwards: overloading resolves at compile time, overriding resolves at runtime via dynamic dispatch (Part 5).
+21. **Overloading is runtime polymorphism / Overriding is compile-time polymorphism** — exactly backwards: overloading resolves at compile time, overriding resolves at runtime via dynamic dispatch (Part 5: Polymorphism).
 
 **Root-cause mental model:** nearly every misconception above comes from mistaking a mechanical Java rule (the `private` keyword, `final`, "can't instantiate," "no multiple inheritance") for the design principle it was meant to serve (protecting invariants, genuine immutability, incomplete contracts, avoiding implementation ambiguity). Always ask: is this a hard language rule, or a design goal the language merely gives tools to pursue?

@@ -80,7 +80,7 @@ This is the second core idea:
 
 ### 4. Exceptions vs. Errors (informally, for now)
 
-At this stage, just hold this distinction loosely — Part 2 goes deep on the `Throwable` hierarchy:
+At this stage, just hold this distinction loosely — Part 2 (The Java Throwable Hierarchy) goes deep on the `Throwable` hierarchy:
 
 - **Exception** → a problem an application might reasonably want to detect, react to, or recover from (bad input, missing file, invalid state).
 - **Error** → a problem so severe (JVM running out of memory, stack overflow) that application code generally isn't expected to recover from it.
@@ -103,7 +103,7 @@ void connectToDatabase() throws SQLException
 
 Here, failing to connect genuinely breaks the method's ability to do what it promised. That's a legitimate exception.
 
-This distinction — "expected alternative outcome" vs. "broken contract" — is exactly why misusing exceptions for ordinary control flow (Parts 15, 22) is considered a design smell.
+This distinction — "expected alternative outcome" vs. "broken contract" — is exactly why misusing exceptions for ordinary control flow (Parts 15: Exception Handling Principles, 22: Common Misconceptions) is considered a design smell.
 
 ### 6. Why Java specifically chose an exception-based mechanism
 
@@ -179,8 +179,8 @@ and it will also catch `FileNotFoundException`, since `FileNotFoundException ext
 
 - a message (`getMessage()`)
 - a stack trace (`getStackTrace()` / `printStackTrace()`)
-- a cause (`getCause()`) — for chaining, Part 12
-- suppressed exceptions (`getSuppressed()`) — Part 11
+- a cause (`getCause()`) — for chaining, Part 12 (Exception Cause and Chaining)
+- suppressed exceptions (`getSuppressed()`) — Part 11 (Suppressed Exceptions)
 
 Two direct subclasses split the world in half based on **who is expected to react**.
 
@@ -190,9 +190,9 @@ Two direct subclasses split the world in half based on **who is expected to reac
 
 - `OutOfMemoryError` — the JVM has run out of heap
 - `StackOverflowError` — a call stack (often from unbounded recursion) exceeded its limit
-- `ExceptionInInitializerError` — a static initializer threw (Part 19)
+- `ExceptionInInitializerError` — a static initializer threw (Part 19: Exceptions During Initialization)
 
-The reasoning: if the JVM itself is in trouble, your `catch` block's own code needs memory and stack space too — there's a real chance the *handler itself* can't execute reliably. That's why catching `Error` is discouraged (with rare, specific exceptions covered in Part 21).
+The reasoning: if the JVM itself is in trouble, your `catch` block's own code needs memory and stack space too — there's a real chance the *handler itself* can't execute reliably. That's why catching `Error` is discouraged (with rare, specific exceptions covered in Part 21: Error vs. Exception: Senior-Level Understanding).
 
 ### 4. `Exception` — problems your code might reasonably react to
 
@@ -245,7 +245,7 @@ Exception
 Assuming an exception's name tells you everything about when to use it, without checking where it sits in the hierarchy. E.g., throwing a raw `Exception` or `RuntimeException` directly instead of a more specific type, which destroys the caller's ability to `catch` selectively.
 
 ### Senior-level perspective
-A junior developer sees the hierarchy as a reference chart to look up when they hit a compiler error. A senior developer treats **hierarchy placement as part of API design** — when creating a custom exception (Part 13), *where* you put it in the hierarchy is a decision about what contract you're making with every future caller of your code.
+A junior developer sees the hierarchy as a reference chart to look up when they hit a compiler error. A senior developer treats **hierarchy placement as part of API design** — when creating a custom exception (Part 13: Custom Exceptions), *where* you put it in the hierarchy is a decision about what contract you're making with every future caller of your code.
 
 ---
 
@@ -260,7 +260,7 @@ The Java Language Specification defines it structurally, not semantically:
 
 That's it. It's a **class-hierarchy-based rule**, enforced by the compiler purely by checking "does this type extend `RuntimeException` or `Error`, yes or no?" There's no semantic analysis of "is this really external" or "is this really a bug" — the compiler doesn't reason about meaning at all.
 
-This means checked-vs-unchecked is a **compiler bookkeeping mechanism**, not an inherent property of what the failure *means*. The meaning (external vs. programming error, Part 2) is a *design convention* Java's own API mostly follows — but nothing stops you from writing a checked exception for a pure logic bug, or an unchecked one for a network failure.
+This means checked-vs-unchecked is a **compiler bookkeeping mechanism**, not an inherent property of what the failure *means*. The meaning (external vs. programming error, Part 2: The Java Throwable Hierarchy) is a *design convention* Java's own API mostly follows — but nothing stops you from writing a checked exception for a pure logic bug, or an unchecked one for a network failure.
 
 ### 2. What "checked" actually enforces — compile-time handling obligation
 
@@ -296,7 +296,7 @@ The correct version of the "compile time vs runtime" folklore: **it's not that c
 
 ### 3. Exception declaration and propagation — the mechanical chain
 
-`throws` (full treatment in Part 5) is how a method makes its checked-exception obligations visible upward:
+`throws` (full treatment in Part 5: The `throws` Declaration, In Depth) is how a method makes its checked-exception obligations visible upward:
 
 ```java
 void low() throws IOException { ... }
@@ -328,7 +328,7 @@ Just by reading this signature — without reading a single line of the implemen
 
 ### 5. Why checked exceptions exist — the design philosophy
 
-Java's designers wanted to solve the C-style problem from Part 1 — errors silently ignored — but wanted the *compiler*, not just discipline or documentation, to guarantee it couldn't happen for a specific category of failure: predictable, recoverable, externally-caused failures (I/O, networking, database access) where "just crash" is rarely acceptable in real software.
+Java's designers wanted to solve the C-style problem from Part 1 (What Is a Java Exception, and Why Does Java Need Exceptions?) — errors silently ignored — but wanted the *compiler*, not just discipline or documentation, to guarantee it couldn't happen for a specific category of failure: predictable, recoverable, externally-caused failures (I/O, networking, database access) where "just crash" is rarely acceptable in real software.
 
 The intended contract:
 - **Checked** → "this can fail in a way that's foreseeable and where the caller should have a real plan" (retry, fallback, user-facing message).
@@ -454,7 +454,7 @@ void step3() {
 1. `"before throw"` prints.
 2. The `RuntimeException` object is constructed (stack trace captured here).
 3. `throw` executes: the current method's execution is abandoned **immediately** — no code after the `throw` statement in that method will ever run.
-4. Control transfers to whatever exception-handling search is next — first checking for a matching `catch` in the current method's enclosing `try` blocks (Part 8), then propagating to the caller (Parts 6–7).
+4. Control transfers to whatever exception-handling search is next — first checking for a matching `catch` in the current method's enclosing `try` blocks (Part 8: `try` and `catch`, In Depth), then propagating to the caller (Parts 6–7).
 
 The compiler actually flags any code physically placed after an unconditional `throw` in the same block as **unreachable code** — a compile error.
 
@@ -470,7 +470,7 @@ catch (IOException e) {
 }
 ```
 
-**`throw new RuntimeException(...)`** constructs a brand-new `Throwable`. Its stack trace is captured *right here, right now*. If there was a previous exception that led to this new one being created, that original exception is now **gone** unless you explicitly pass it as a cause (Part 12).
+**`throw new RuntimeException(...)`** constructs a brand-new `Throwable`. Its stack trace is captured *right here, right now*. If there was a previous exception that led to this new one being created, that original exception is now **gone** unless you explicitly pass it as a cause (Part 12: Exception Cause and Chaining).
 
 **`throw existingException;`** (a "rethrow") throws the **exact same object reference** that was already caught. Its stack trace is **not** recaptured — it still reflects wherever that exception was *originally* constructed.
 
@@ -764,7 +764,7 @@ void methodC() {
 ### Common misconception
 > "If a method has a try/catch anywhere in it, any exception happening inside that method will be caught there."
 
-**Correct mental model:** A `try/catch` only intercepts exceptions whose type matches its specific `catch` clause(s) (Part 8 covers matching precisely).
+**Correct mental model:** A `try/catch` only intercepts exceptions whose type matches its specific `catch` clause(s) (Part 8: `try` and `catch`, In Depth, covers matching precisely).
 
 ### Common developer mistake
 Assuming a caught exception's stack trace will show where it was *caught*, rather than where it was *originally constructed*.
@@ -823,7 +823,7 @@ Assuming **no** `try/catch` anywhere:
 
 ### 3. What happens to local state during unwinding — and why it matters
 
-`x`, `y`, and `z` are simply **gone** the moment their frame is popped. There is no automatic saving, no rollback, no undo of side effects those methods may have already caused. This is exactly why resource cleanup during unwinding is a real design problem — **stack unwinding guarantees local variables are discarded, but does *not* automatically guarantee that resources those variables referenced get properly released** — unless you use `finally` (Part 9) or try-with-resources (Part 10).
+`x`, `y`, and `z` are simply **gone** the moment their frame is popped. There is no automatic saving, no rollback, no undo of side effects those methods may have already caused. This is exactly why resource cleanup during unwinding is a real design problem — **stack unwinding guarantees local variables are discarded, but does *not* automatically guarantee that resources those variables referenced get properly released** — unless you use `finally` (Part 9: `finally`, In Depth) or try-with-resources (Part 10: Try-With-Resources).
 
 ### 4. Where a handler stops the unwind
 
@@ -879,7 +879,7 @@ Search methodA's frame  → HANDLER FOUND → unwinding stops, catch block runs
 ### 6. Why this design (briefly, staying in scope)
 
 - **Irreversibility** — once a frame is popped, its local state is gone forever. There's no equivalent of "retry from where it failed" built into the language — any retry logic has to be written explicitly.
-- **Cleanup obligation falls on the code, not the JVM** — anything needing explicit cleanup will leak unless the code guarantees cleanup *during* the unwind, not after. This is the direct motivation for `finally` (Part 9) and try-with-resources (Part 10).
+- **Cleanup obligation falls on the code, not the JVM** — anything needing explicit cleanup will leak unless the code guarantees cleanup *during* the unwind, not after. This is the direct motivation for `finally` (Part 9: `finally`, In Depth) and try-with-resources (Part 10: Try-With-Resources).
 
 ---
 
@@ -970,7 +970,7 @@ try {
 Problems this causes:
 - **Loss of information** — the handling code has no idea *which* operation actually failed.
 - **Accidentally catching bugs, not just expected failures** — a `NullPointerException` from a genuine coding mistake gets caught and "handled" the same as a legitimate I/O failure.
-- **Violates the "catch what you can handle" principle** (Part 15) — a single generic response usually can't meaningfully "handle" three unrelated failure categories.
+- **Violates the "catch what you can handle" principle** (Part 15: Exception Handling Principles) — a single generic response usually can't meaningfully "handle" three unrelated failure categories.
 
 ### When broad catching *can* be justified
 
@@ -1121,7 +1121,7 @@ void test() {
 
 **Whatever `finally` does to leave the block — return, throw, break, continue — wins, unconditionally, discarding whatever the `try`/`catch` block was doing, including an in-flight exception.**
 
-Contrast this with a **suppressed exception** (Part 11) — a different, safer mechanism specifically designed to preserve both exceptions when a resource's automatic `close()` throws during propagation.
+Contrast this with a **suppressed exception** (Part 11: Suppressed Exceptions) — a different, safer mechanism specifically designed to preserve both exceptions when a resource's automatic `close()` throws during propagation.
 
 ### 5. "`finally` always executes" — the limitations
 
@@ -1145,7 +1145,7 @@ Real, documented exceptions:
 Putting `return` or `throw` inside a `finally` block, usually unintentionally — silently discarding whatever the `try`/`catch` was actually trying to communicate.
 
 ### Senior-level perspective
-A senior developer knows: **`finally` doesn't just "also run" — it has the power to completely override the outcome of `try`/`catch`, silently, for return values and in-flight exceptions alike.** This is exactly why try-with-resources (Part 10) is generally preferred for resource cleanup.
+A senior developer knows: **`finally` doesn't just "also run" — it has the power to completely override the outcome of `try`/`catch`, silently, for return values and in-flight exceptions alike.** This is exactly why try-with-resources (Part 10: Try-With-Resources) is generally preferred for resource cleanup.
 
 ---
 
@@ -1165,7 +1165,7 @@ try {
 }
 ```
 
-The `null` check is required because if `new FileReader(...)` itself throws, `fr` is never assigned. With two resources, this pattern gets significantly worse, and this is exactly the boilerplate-under-pressure situation flagged in Part 3 — developers routinely get the null-checks, close-ordering, or exception-swallowing subtly wrong.
+The `null` check is required because if `new FileReader(...)` itself throws, `fr` is never assigned. With two resources, this pattern gets significantly worse, and this is exactly the boilerplate-under-pressure situation flagged in Part 3 (Checked vs. Unchecked Exceptions, In Depth) — developers routinely get the null-checks, close-ordering, or exception-swallowing subtly wrong.
 
 ### 2. `AutoCloseable` and `Closeable`
 
@@ -1181,7 +1181,7 @@ public interface Closeable extends AutoCloseable {
 }
 ```
 
-`Closeable` narrows `close()`'s declared exception from `Exception` to the more specific `IOException` — legal because a subinterface can *narrow*, but never *broaden*, a declared checked exception (Part 17).
+`Closeable` narrows `close()`'s declared exception from `Exception` to the more specific `IOException` — legal because a subinterface can *narrow*, but never *broaden*, a declared checked exception (Part 17: Exception Behavior in Method Overriding).
 
 ### 3. Basic syntax and what it desugars to
 
@@ -1204,7 +1204,7 @@ try {
 } 
 ```
 
-...except with **correct exception-preserving behavior** that the naive hand-written `finally` version doesn't give you for free (Part 11).
+...except with **correct exception-preserving behavior** that the naive hand-written `finally` version doesn't give you for free (Part 11: Suppressed Exceptions).
 
 ### 4. Resource lifecycle — when construction, use, and closing happen
 
@@ -1227,7 +1227,7 @@ Resources are **constructed in the order declared** (`fr1` then `fr2`), but **cl
 
 If `fr2`'s construction throws (after `fr1` succeeded), Java still closes `fr1` before letting that failure propagate.
 
-### 6. Exceptions during closing — the problem this section sets up for Part 11
+### 6. Exceptions during closing — the problem this section sets up for Part 11 (Suppressed Exceptions)
 
 ```java
 try (Resource r = new Resource()) {
@@ -1307,7 +1307,7 @@ Primary: work failed
 Suppressed: close failed
 ```
 
-Compare this to the equivalent hand-written `finally` version (Part 9), where the second exception would have **completely replaced** the first, and the first would simply be gone.
+Compare this to the equivalent hand-written `finally` version (Part 9: `finally`, In Depth), where the second exception would have **completely replaced** the first, and the first would simply be gone.
 
 ### 3. `getSuppressed()`
 
@@ -1509,9 +1509,9 @@ class InsufficientFundsException extends RuntimeException {
 }
 ```
 
-Apply the same reasoning from Part 3: is this failure **foreseeable and something the caller could reasonably act on differently**? → checked. Is it closer to **a violated precondition or a programming mistake**? → unchecked.
+Apply the same reasoning from Part 3 (Checked vs. Unchecked Exceptions, In Depth): is this failure **foreseeable and something the caller could reasonably act on differently**? → checked. Is it closer to **a violated precondition or a programming mistake**? → unchecked.
 
-Much of the modern Java ecosystem (Spring, and many newer libraries) leans toward **unchecked custom exceptions by default**, specifically to avoid the boilerplate/empty-catch problems from Part 3.
+Much of the modern Java ecosystem (Spring, and many newer libraries) leans toward **unchecked custom exceptions by default**, specifically to avoid the boilerplate/empty-catch problems from Part 3 (Checked vs. Unchecked Exceptions, In Depth).
 
 ### 3. Constructors — the standard pattern to follow
 
@@ -1702,7 +1702,7 @@ class ValidationException extends RuntimeException {
 
 **Include enough identifying information to locate and understand the specific failure — without including entire object graphs or anything that shouldn't be persisted in a log in the first place.**
 
-### 7. Preserving causes — the naming-and-design tie-in to Part 12
+### 7. Preserving causes — the naming-and-design tie-in to Part 12 (Exception Cause and Chaining)
 
 A well-named, well-designed exception that **drops its cause** is still a badly designed exception overall, no matter how good its message is.
 
@@ -1897,7 +1897,7 @@ throw new ValidationException("Invalid input");
 throw new ValidationException("email", providedEmail, "must contain '@'");
 ```
 
-(Fully covered in Part 14.)
+(Fully covered in Part 14: Exception Naming and Design.)
 
 ---
 
@@ -1975,13 +1975,13 @@ A senior developer sees exception handling as a **single coherent design discipl
 | Concept | Precise meaning | Where covered |
 |---|---|---|
 | **Detecting a failure** | Code determines something has gone wrong | Implicit throughout |
-| **Throwing** | Constructing a `Throwable` and executing `throw` on it | Part 4 |
+| **Throwing** | Constructing a `Throwable` and executing `throw` on it | Part 4 (The `throw` Statement, In Depth) |
 | **Propagating** | The exception moving up the call stack, unhandled, frame by frame | Parts 6–7 |
-| **Catching** | A `catch` clause's type matches the exception, control transfers | Part 8 |
-| **Handling** | Code in a `catch` block genuinely *resolves* the situation | Part 15, Principle 1 |
-| **Rethrowing** | `throw e` — propagating the *same* object onward | Part 4 |
-| **Wrapping** | `throw new X(msg, e)` — a *new* exception referencing the original as cause | Part 12 |
-| **Suppressing** | A second exception during cleanup gets attached rather than replacing the first | Part 11 |
+| **Catching** | A `catch` clause's type matches the exception, control transfers | Part 8 (`try` and `catch`, In Depth) |
+| **Handling** | Code in a `catch` block genuinely *resolves* the situation | Part 15 (Exception Handling Principles), Principle 1 |
+| **Rethrowing** | `throw e` — propagating the *same* object onward | Part 4 (The `throw` Statement, In Depth) |
+| **Wrapping** | `throw new X(msg, e)` — a *new* exception referencing the original as cause | Part 12 (Exception Cause and Chaining) |
+| **Suppressing** | A second exception during cleanup gets attached rather than replacing the first | Part 11 (Suppressed Exceptions) |
 
 **Catching and handling are not the same thing.** You can catch an exception and do nothing meaningful with it — that's catching *without* handling. Handling presupposes catching, but catching does not imply handling.
 
@@ -2163,7 +2163,7 @@ class Child extends Parent {
 
 Legal because unchecked exceptions were never part of the compiler-enforced contract to begin with — any method can always throw an unchecked exception, invisibly to the compiler.
 
-### 6. Tying it back to Part 10 — why this rule matters for `AutoCloseable`/`Closeable`
+### 6. Tying it back to Part 10 (Try-With-Resources) — why this rule matters for `AutoCloseable`/`Closeable`
 
 ```java
 public interface AutoCloseable {
@@ -2214,7 +2214,7 @@ class DatabaseConnection {
 }
 ```
 
-The exact same rules from Parts 3 and 5 apply: a checked exception declared on a constructor must be caught or declared by whatever calls `new DatabaseConnection(url)`.
+The exact same rules from Parts 3 (Checked vs. Unchecked Exceptions, In Depth) and 5 (The `throws` Declaration, In Depth) apply: a checked exception declared on a constructor must be caught or declared by whatever calls `new DatabaseConnection(url)`.
 
 ```java
 void connect() throws java.sql.SQLException {
@@ -2248,7 +2248,7 @@ Account a = new Account(new java.math.BigDecimal("-50")); // throws IllegalArgum
 // this line never finishes — 'a' is never assigned anything
 ```
 
-There is no partially-constructed object the caller could get a reference to — the exception propagates out of `new Account(...)` exactly like out of any method call (Part 6).
+There is no partially-constructed object the caller could get a reference to — the exception propagates out of `new Account(...)` exactly like out of any method call (Part 6: Exception Propagation, In Depth).
 
 ### 4. Partially initialized objects — the internal, not external, story
 
@@ -2318,7 +2318,7 @@ class Account {
 }
 ```
 
-Behaves exactly like Part 18's constructor-failure story — no object produced, ordinary propagation.
+Behaves exactly like the constructor-failure story from Part 18 (Exceptions in Constructors) — no object produced, ordinary propagation.
 
 ### 3. Static initialization failures — genuinely different, because it runs once
 
@@ -2338,7 +2338,7 @@ void useConfig() {
 
 ### 4. `ExceptionInInitializerError`
 
-An `Error` (Part 2), not an `Exception` — a failed static initializer means the class itself couldn't establish its shared, static invariants, treated as more fundamental than a single failed object construction. The original exception is preserved as the cause (Part 12's chaining mechanism):
+An `Error` (Part 2: The Java Throwable Hierarchy), not an `Exception` — a failed static initializer means the class itself couldn't establish its shared, static invariants, treated as more fundamental than a single failed object construction. The original exception is preserved as the cause (the chaining mechanism from Part 12: Exception Cause and Chaining):
 
 ```java
 try {
@@ -2397,7 +2397,7 @@ int parseOrDefault(String s) {
 }
 ```
 
-If a meaningful fraction of inputs are routinely non-numeric, every one pays the full stack-trace-capture cost for an outcome that isn't really exceptional. Same anti-pattern as Part 15, Principle 5 — now viewed through a performance lens.
+If a meaningful fraction of inputs are routinely non-numeric, every one pays the full stack-trace-capture cost for an outcome that isn't really exceptional. Same anti-pattern as Part 15 (Exception Handling Principles), Principle 5 — now viewed through a performance lens.
 
 ### 3. Suppressing stack trace capture — a technique with a serious caveat
 
@@ -2497,35 +2497,35 @@ Broadest is not safest here — catching `Error` alongside `Exception` treats "t
 
 **Statement → Verdict → Correct mental model → Example**, consolidated from Parts 1–21:
 
-1. **"Checked exceptions happen at compile time."** False — all exceptions occur at runtime; the compiler only enforces a handling/declaration obligation for checked ones (Part 3).
+1. **"Checked exceptions happen at compile time."** False — all exceptions occur at runtime; the compiler only enforces a handling/declaration obligation for checked ones (Part 3: Checked vs. Unchecked Exceptions, In Depth).
 
 2. **"`throws` throws the exception."** False — `throws` is a zero-runtime-behavior declaration; only `throw` actually does anything (Parts 4–5).
 
-3. **"RuntimeException means the JVM failed."** False — `RuntimeException` is just the unchecked branch of `Exception`; JVM trouble is signaled by `Error` (Part 2, Part 21).
+3. **"RuntimeException means the JVM failed."** False — `RuntimeException` is just the unchecked branch of `Exception`; JVM trouble is signaled by `Error` (Part 2: The Java Throwable Hierarchy, Part 21: Error vs. Exception: Senior-Level Understanding).
 
-4. **"`finally` always executes."** Mostly true — except `System.exit()`, a killed process, an infinite `try` block, or a fatal `Error` during `finally` itself (Part 9).
+4. **"`finally` always executes."** Mostly true — except `System.exit()`, a killed process, an infinite `try` block, or a fatal `Error` during `finally` itself (Part 9: `finally`, In Depth).
 
-5. **"You should always catch exceptions."** False — catch only where you can do something meaningfully different (Part 15, Principle 1).
+5. **"You should always catch exceptions."** False — catch only where you can do something meaningfully different (Part 15: Exception Handling Principles, Principle 1).
 
-6. **"You should never catch Error."** Mostly true, with narrow, deliberate exceptions — top-level boundaries, isolated `StackOverflowError` handling, monitoring infrastructure (Part 21).
+6. **"You should never catch Error."** Mostly true, with narrow, deliberate exceptions — top-level boundaries, isolated `StackOverflowError` handling, monitoring infrastructure (Part 21: Error vs. Exception: Senior-Level Understanding).
 
-7. **"Exceptions are always slow."** False as a blanket claim — cost is concentrated in stack-trace capture, scaling with depth and frequency (Part 20).
+7. **"Exceptions are always slow."** False as a blanket claim — cost is concentrated in stack-trace capture, scaling with depth and frequency (Part 20: Exception Performance).
 
-8. **"Logging an exception means handling it."** False — logging makes it visible; handling means actually resolving it (Part 15, Part 16).
+8. **"Logging an exception means handling it."** False — logging makes it visible; handling means actually resolving it (Part 15: Exception Handling Principles, Part 16: Exception Handling vs. Exception Throwing).
 
-9. **"Catching an exception means the problem is fixed."** False — catching is mechanical type-matching; only the catch block's actual response can "fix" anything (Part 8, Part 16).
+9. **"Catching an exception means the problem is fixed."** False — catching is mechanical type-matching; only the catch block's actual response can "fix" anything (Part 8: `try` and `catch`, In Depth, Part 16: Exception Handling vs. Exception Throwing).
 
-10. **"Every failure needs a custom exception."** False — only failures needing genuinely distinct handling justify a new type (Part 13).
+10. **"Every failure needs a custom exception."** False — only failures needing genuinely distinct handling justify a new type (Part 13: Custom Exceptions).
 
-11. **"Every exception should be caught where it occurs."** False — often best left to propagate to a layer with more context/authority (Part 6, Part 15).
+11. **"Every exception should be caught where it occurs."** False — often best left to propagate to a layer with more context/authority (Part 6: Exception Propagation, In Depth, Part 15: Exception Handling Principles).
 
-12. **"A RuntimeException should never be caught."** False — unchecked means not compiler-enforced, not "shouldn't be caught" (Part 3, Part 15).
+12. **"A RuntimeException should never be caught."** False — unchecked means not compiler-enforced, not "shouldn't be caught" (Part 3: Checked vs. Unchecked Exceptions, In Depth, Part 15: Exception Handling Principles).
 
-13. **"A checked exception is always better than an unchecked exception."** False — each has a genuine design sweet spot; real, unresolved community disagreement exists (Part 3).
+13. **"A checked exception is always better than an unchecked exception."** False — each has a genuine design sweet spot; real, unresolved community disagreement exists (Part 3: Checked vs. Unchecked Exceptions, In Depth).
 
-14. **"The exception message is enough; the cause isn't important."** False — the cause chain preserves the actual root failure a message alone can't (Part 12).
+14. **"The exception message is enough; the cause isn't important."** False — the cause chain preserves the actual root failure a message alone can't (Part 12: Exception Cause and Chaining).
 
-15. **"Rethrowing and wrapping are the same thing."** False — rethrowing propagates the identical object; wrapping creates a new one referencing the original as cause (Part 4, Part 12, Part 16).
+15. **"Rethrowing and wrapping are the same thing."** False — rethrowing propagates the identical object; wrapping creates a new one referencing the original as cause (Part 4: The `throw` Statement, In Depth, Part 12: Exception Cause and Chaining, Part 16: Exception Handling vs. Exception Throwing).
 
 ### Senior-level perspective
 Almost none of these are *completely* false in every case — they're oversimplifications that collapse a genuine nuance into a blanket rule. The senior-level habit is asking, for any absolute-sounding statement about exceptions, "is this actually always true, or true in the common case with specific, understandable exceptions?"
@@ -2549,56 +2549,56 @@ public void updateUserEmail(String userId, String newEmail) {
     userRepository.save(user);
 }
 ```
-**Senior-level decision:** Wrapping (Part 12) avoids leaking a persistence-layer detail into the service layer's contract; declaring `throws SQLException` upward is the lazy alternative.
+**Senior-level decision:** Wrapping (Part 12: Exception Cause and Chaining) avoids leaking a persistence-layer detail into the service layer's contract; declaring `throws SQLException` upward is the lazy alternative.
 **Trade-off:** An unchecked `UserServiceException` (Spring-style) is usually preferable to a new checked type if callers never need to differentiate SQL failures specifically.
 
 ## Scenario 2 — A `finally` block throws another exception
-**Situation:** `process()` throws, then `cleanup()` in `finally` also throws — silently replaces the first (Part 9).
+**Situation:** `process()` throws, then `cleanup()` in `finally` also throws — silently replaces the first (Part 9: `finally`, In Depth).
 **Correct behavior:** Prefer try-with-resources if `cleanup()` is resource-closing (automatic suppression, Part 10–11); otherwise manually track and attach via `addSuppressed()`.
 **Senior-level decision:** This is exactly why try-with-resources exists — hand-rolled preservation is fragile.
 **Trade-off:** If `cleanup()` truly can't fail, plain `finally` is fine — but that assumption should be verified.
 
 ## Scenario 3 — Both main operation and cleanup throw
 **Situation:** Try-with-resources body and `close()` both throw.
-**Correct behavior:** No fix needed — try-with-resources already makes the body's exception primary and the close exception suppressed (Part 11). Responsibility is to check `getSuppressed()` when debugging.
+**Correct behavior:** No fix needed — try-with-resources already makes the body's exception primary and the close exception suppressed (Part 11: Suppressed Exceptions). Responsibility is to check `getSuppressed()` when debugging.
 **Senior-level decision:** A suppressed exception can sometimes be more diagnostically useful than the primary one.
 
 ## Scenario 4 — Catching `Exception` and continuing
 **Situation:** Three unrelated steps wrapped in one `catch (Exception e)` that logs and continues.
-**Correct behavior:** Catch specific types per step, each handled distinctly (Part 15, Principle 8).
+**Correct behavior:** Catch specific types per step, each handled distinctly (Part 15: Exception Handling Principles, Principle 8).
 **Senior-level decision:** Broad catching hides which step failed and risks catching genuine bugs alongside expected failures.
 **Trade-off:** Justified only as a deliberate, documented top-level batch-processing boundary — not a reflex.
 
 ## Scenario 5 — Logging and rethrowing at every layer
 **Situation:** Every layer in a call chain logs the same exception and rethrows it.
-**Correct behavior:** Log exactly once — at the top-level boundary or the layer actually deciding what happens next (Part 15, Principle 6). Intermediate layers just propagate, no logging.
+**Correct behavior:** Log exactly once — at the top-level boundary or the layer actually deciding what happens next (Part 15: Exception Handling Principles, Principle 6). Intermediate layers just propagate, no logging.
 **Trade-off:** Multiple log points are justified only if each adds genuinely distinct diagnostic context, not the same exception restated.
 
 ## Scenario 6 — Lower-level exception wrapped, cause lost
 **Situation:** `throw new UserServiceException("Could not save user");` inside a `catch (SQLException e)`.
 **Correct behavior:** Pass the cause: `throw new UserServiceException("Could not save user", e);`
-**Senior-level decision:** Omitting the cause is close to an automatic code-review flag (Part 12, Part 15 Principle 3); also requires the exception class to actually support a `(String, Throwable)` constructor (Part 13).
+**Senior-level decision:** Omitting the cause is close to an automatic code-review flag (Part 12: Exception Cause and Chaining, Part 15: Exception Handling Principles, Principle 3); also requires the exception class to actually support a `(String, Throwable)` constructor (Part 13: Custom Exceptions).
 
 ## Scenario 7 — Custom exception hierarchy has too many classes
 **Situation:** Four near-identical `UserNameTooLongException`/etc. classes, all handled the same way by every caller.
-**Correct behavior:** Collapse into one parameterized `ValidationException(field, reason)` (Part 14, section 5).
+**Correct behavior:** Collapse into one parameterized `ValidationException(field, reason)` (Part 14: Exception Naming and Design, section 5).
 **Senior-level decision:** The test is behavioral distinctness — does any caller need to react differently? If not, one class beats many.
 **Trade-off:** Genuinely distinct handling (different HTTP status, different recovery flow) justifies separate types.
 
 ## Scenario 8 — A constructor throws an exception
 **Situation:** `Account` constructor registers `this` in a static list *before* validating balance, which can throw.
-**Correct behavior:** Reorder — validate first, publish/register `this` only after success (Part 18, section 4).
+**Correct behavior:** Reorder — validate first, publish/register `this` only after success (Part 18: Exceptions in Constructors, section 4).
 **Senior-level decision:** No object reaches the caller on failure, but side effects performed before the failure point are never automatically undone — a real, exploitable bug pattern.
 
 ## Scenario 9 — Overridden method declares an incompatible checked exception
 **Situation:** `Child.process()` overrides `Parent.process() throws IOException` with `throws SQLException` — compile error.
 **Correct behavior:** Don't widen `Parent`'s declaration to accommodate `Child`. Either wrap the SQL failure as an IOException-compatible type, or reconsider whether `Child` should extend `Parent` at all.
-**Senior-level decision:** This is the Liskov Substitution Principle applied to exceptions (Part 17) — protects every caller who wrote `catch (IOException e)` against `Parent`'s contract.
+**Senior-level decision:** This is the Liskov Substitution Principle applied to exceptions (Part 17: Exception Behavior in Method Overriding) — protects every caller who wrote `catch (IOException e)` against `Parent`'s contract.
 
 ## Scenario 10 — Exceptions used for expected outcomes
 **Situation:** A routine cache miss is modeled as a thrown `KeyNotFoundException`, caught on nearly every call.
-**Correct behavior:** Model "not found" as a normal return value (`Optional`), not an exception (Part 15, Principle 5).
-**Senior-level decision:** The litmus test — if a "failure" happens on a large fraction of calls under normal operation, it's a routine alternative outcome, not an exception. Also a Part 20 performance issue, but the design problem is primary.
+**Correct behavior:** Model "not found" as a normal return value (`Optional`), not an exception (Part 15: Exception Handling Principles, Principle 5).
+**Senior-level decision:** The litmus test — if a "failure" happens on a large fraction of calls under normal operation, it's a routine alternative outcome, not an exception. Also a Part 20 (Exception Performance) performance issue, but the design problem is primary.
 
 ---
 
@@ -2606,42 +2606,42 @@ public void updateUserEmail(String userId, String newEmail) {
 
 | Area | Covered in |
 |---|---|
-| What exceptions are, why they exist | Part 1 |
-| `Throwable` hierarchy | Part 2 |
-| `Error` vs `Exception` (structural + senior-level) | Part 2, Part 21 |
-| Checked exceptions | Part 3 |
-| Unchecked exceptions | Part 3 |
-| `throw` | Part 4 |
-| `throws` | Part 5 |
-| Exception propagation | Part 6 |
-| Stack unwinding | Part 7 |
-| `try` / `catch` | Part 8 |
-| Multiple catch blocks, multi-catch, catch ordering | Part 8 |
-| `finally` | Part 9 |
-| `return` + `finally` | Part 9 |
-| `throw` + `finally` | Part 9 |
-| Try-with-resources | Part 10 |
-| `AutoCloseable` / `Closeable` | Part 10 |
-| Suppressed exceptions | Part 11 |
-| Exception causes / chaining | Part 12 |
-| Rethrowing | Part 4, Part 12, Part 16 |
-| Wrapping | Part 12, Part 16 |
-| Custom exceptions | Part 13 |
-| Exception naming / hierarchy design | Part 14 |
-| Exception messages / context | Part 14 |
-| Exception handling principles (9 principles) | Part 15 |
-| Handling vs. throwing (8-stage vocabulary) | Part 16 |
-| Exceptions in method overriding | Part 17 |
-| Exceptions in constructors | Part 18 |
-| Initialization-related exceptions | Part 19 |
-| Exception performance | Part 20 |
-| `Error` handling decisions | Part 21 |
-| Common misconceptions | Part 22 |
-| Practical scenarios | Part 23 |
+| What exceptions are, why they exist | Part 1 (What Is a Java Exception, and Why Does Java Need Exceptions?) |
+| `Throwable` hierarchy | Part 2 (The Java Throwable Hierarchy) |
+| `Error` vs `Exception` (structural + senior-level) | Part 2 (The Java Throwable Hierarchy), Part 21 (Error vs. Exception: Senior-Level Understanding) |
+| Checked exceptions | Part 3 (Checked vs. Unchecked Exceptions, In Depth) |
+| Unchecked exceptions | Part 3 (Checked vs. Unchecked Exceptions, In Depth) |
+| `throw` | Part 4 (The `throw` Statement, In Depth) |
+| `throws` | Part 5 (The `throws` Declaration, In Depth) |
+| Exception propagation | Part 6 (Exception Propagation, In Depth) |
+| Stack unwinding | Part 7 (Stack Unwinding) |
+| `try` / `catch` | Part 8 (`try` and `catch`, In Depth) |
+| Multiple catch blocks, multi-catch, catch ordering | Part 8 (`try` and `catch`, In Depth) |
+| `finally` | Part 9 (`finally`, In Depth) |
+| `return` + `finally` | Part 9 (`finally`, In Depth) |
+| `throw` + `finally` | Part 9 (`finally`, In Depth) |
+| Try-with-resources | Part 10 (Try-With-Resources) |
+| `AutoCloseable` / `Closeable` | Part 10 (Try-With-Resources) |
+| Suppressed exceptions | Part 11 (Suppressed Exceptions) |
+| Exception causes / chaining | Part 12 (Exception Cause and Chaining) |
+| Rethrowing | Part 4 (The `throw` Statement, In Depth), Part 12 (Exception Cause and Chaining), Part 16 (Exception Handling vs. Exception Throwing) |
+| Wrapping | Part 12 (Exception Cause and Chaining), Part 16 (Exception Handling vs. Exception Throwing) |
+| Custom exceptions | Part 13 (Custom Exceptions) |
+| Exception naming / hierarchy design | Part 14 (Exception Naming and Design) |
+| Exception messages / context | Part 14 (Exception Naming and Design) |
+| Exception handling principles (9 principles) | Part 15 (Exception Handling Principles) |
+| Handling vs. throwing (8-stage vocabulary) | Part 16 (Exception Handling vs. Exception Throwing) |
+| Exceptions in method overriding | Part 17 (Exception Behavior in Method Overriding) |
+| Exceptions in constructors | Part 18 (Exceptions in Constructors) |
+| Initialization-related exceptions | Part 19 (Exceptions During Initialization) |
+| Exception performance | Part 20 (Exception Performance) |
+| `Error` handling decisions | Part 21 (Error vs. Exception: Senior-Level Understanding) |
+| Common misconceptions | Part 22 (Common Misconceptions) |
+| Practical scenarios | Part 23 (Realistic Java Exception Scenarios) |
 
 ### The single thread running through the whole course
 
-**Every exception-handling decision — checked vs. unchecked, catch vs. propagate, rethrow vs. wrap, catch `Exception` vs. a specific type, log vs. stay silent — is really the same question asked at a different layer: "who is actually positioned to do something meaningful about this failure, and what does everyone else along the way owe to that eventual point of resolution?"** Design (Parts 13–14) is about naming failures so that question has a clear answer. The principles (Part 15) are about not answering it lazily. The vocabulary (Part 16) is about being precise regarding who's actually doing what. Everything else — propagation, unwinding, suppression, chaining — is the mechanism that ensures the answer doesn't get lost in transit.
+**Every exception-handling decision — checked vs. unchecked, catch vs. propagate, rethrow vs. wrap, catch `Exception` vs. a specific type, log vs. stay silent — is really the same question asked at a different layer: "who is actually positioned to do something meaningful about this failure, and what does everyone else along the way owe to that eventual point of resolution?"** Design (Parts 13–14) is about naming failures so that question has a clear answer. The principles (Part 15: Exception Handling Principles) are about not answering it lazily. The vocabulary (Part 16: Exception Handling vs. Exception Throwing) is about being precise regarding who's actually doing what. Everything else — propagation, unwinding, suppression, chaining — is the mechanism that ensures the answer doesn't get lost in transit.
 
 ---
 
@@ -2653,38 +2653,38 @@ A quick-reference table of the exceptions encountered most often in real Java co
 
 | Exception | Typical cause | Course reference |
 |---|---|---|
-| `NullPointerException` | Dereferencing a `null` reference — calling a method or accessing a field on an object that wasn't initialized, wasn't found, or was never assigned. | Part 2, §5 |
-| `IllegalArgumentException` | A caller passed an argument that violates the method's precondition (e.g., a negative value where only positive is valid). Signals a caller-side bug, not an environmental failure. | Part 2, §5; Part 13, §2 |
-| `IllegalStateException` | A method was called at a point where the object's *current state* doesn't permit it (e.g., calling `next()` on an exhausted `Iterator`, or using a resource after it's been closed). | Part 2, §5 |
-| `IndexOutOfBoundsException` (and `ArrayIndexOutOfBoundsException`, `StringIndexOutOfBoundsException`) | An index used to access an array, `List`, or `String` fell outside the valid range `[0, length)`. Almost always an off-by-one or unvalidated-input bug. | Part 2, §5 |
-| `ClassCastException` | An object was cast to a type it isn't actually an instance of at runtime (e.g., casting an `Integer` stored in an `Object` variable to a `String`). | Part 2 (hierarchy reasoning) |
-| `NumberFormatException` | A string passed to `Integer.parseInt()`, `Double.parseDouble()`, etc. isn't a valid representation of that numeric type. Technically a subtype of `IllegalArgumentException`. | Part 2, §5 |
-| `ArithmeticException` | An illegal arithmetic operation — most commonly integer division by zero (`int` division; floating-point division by zero instead produces `Infinity`/`NaN`, no exception). | Part 1, §3 |
-| `ConcurrentModificationException` | A collection was structurally modified (add/remove) while being iterated, other than through the iterator's own `remove()` method — detected via a fail-fast modification count, not full thread-safety enforcement. | (design-adjacent to Part 2's "programming mistake" category) |
-| `UnsupportedOperationException` | An operation was attempted that the specific implementation doesn't support (e.g., calling `.add()` on a `List` created via `List.of(...)` or `Collections.unmodifiableList(...)`). | Part 2, §5 (unchecked = caller-side usage error) |
-| `NoSuchElementException` | Calling `next()` on an `Iterator`/`Scanner` that has no more elements, or `.get()` on an empty `Optional`. | Part 1, §5 (expected-outcome vs. broken-contract distinction) |
+| `NullPointerException` | Dereferencing a `null` reference — calling a method or accessing a field on an object that wasn't initialized, wasn't found, or was never assigned. | Part 2 (The Java Throwable Hierarchy), §5 |
+| `IllegalArgumentException` | A caller passed an argument that violates the method's precondition (e.g., a negative value where only positive is valid). Signals a caller-side bug, not an environmental failure. | Part 2 (The Java Throwable Hierarchy), §5; Part 13 (Custom Exceptions), §2 |
+| `IllegalStateException` | A method was called at a point where the object's *current state* doesn't permit it (e.g., calling `next()` on an exhausted `Iterator`, or using a resource after it's been closed). | Part 2 (The Java Throwable Hierarchy), §5 |
+| `IndexOutOfBoundsException` (and `ArrayIndexOutOfBoundsException`, `StringIndexOutOfBoundsException`) | An index used to access an array, `List`, or `String` fell outside the valid range `[0, length)`. Almost always an off-by-one or unvalidated-input bug. | Part 2 (The Java Throwable Hierarchy), §5 |
+| `ClassCastException` | An object was cast to a type it isn't actually an instance of at runtime (e.g., casting an `Integer` stored in an `Object` variable to a `String`). | Part 2 (The Java Throwable Hierarchy) (hierarchy reasoning) |
+| `NumberFormatException` | A string passed to `Integer.parseInt()`, `Double.parseDouble()`, etc. isn't a valid representation of that numeric type. Technically a subtype of `IllegalArgumentException`. | Part 2 (The Java Throwable Hierarchy), §5 |
+| `ArithmeticException` | An illegal arithmetic operation — most commonly integer division by zero (`int` division; floating-point division by zero instead produces `Infinity`/`NaN`, no exception). | Part 1 (What Is a Java Exception, and Why Does Java Need Exceptions?), §3 |
+| `ConcurrentModificationException` | A collection was structurally modified (add/remove) while being iterated, other than through the iterator's own `remove()` method — detected via a fail-fast modification count, not full thread-safety enforcement. | (design-adjacent to the "programming mistake" category from Part 2: The Java Throwable Hierarchy) |
+| `UnsupportedOperationException` | An operation was attempted that the specific implementation doesn't support (e.g., calling `.add()` on a `List` created via `List.of(...)` or `Collections.unmodifiableList(...)`). | Part 2 (The Java Throwable Hierarchy), §5 (unchecked = caller-side usage error) |
+| `NoSuchElementException` | Calling `next()` on an `Iterator`/`Scanner` that has no more elements, or `.get()` on an empty `Optional`. | Part 1 (What Is a Java Exception, and Why Does Java Need Exceptions?), §5 (expected-outcome vs. broken-contract distinction) |
 
 ## Checked (`Exception`, non-`RuntimeException`)
 
 | Exception | Typical cause | Course reference |
 |---|---|---|
-| `IOException` (and subtypes like `FileNotFoundException`, `EOFException`) | A failure during an I/O operation — a file that can't be opened/read/written, a stream that closes unexpectedly. Represents an external-world failure outside the JVM's control. | Part 2, §5 |
-| `SQLException` | A failure interacting with a database — connection issues, constraint violations, malformed queries. External system, checked deliberately. | Part 2, §5; Part 3, §10 (Spring's unchecked-wrapping reaction) |
-| `ClassNotFoundException` | Code attempted to load a class by name (`Class.forName(...)`) and the class wasn't found on the classpath — an environment/configuration issue. | Part 2, §5 |
-| `InterruptedException` | A thread was interrupted while blocked (e.g., in `Thread.sleep()`, `Object.wait()`). Checked specifically so a cancellation signal can never be silently ignored. | Part 2, §5 |
-| `ParseException` | Text couldn't be parsed into a structured form (e.g., `SimpleDateFormat.parse()` on a malformed date string). | Part 2 (external/malformed-input category) |
-| `CloneNotSupportedException` | `Object.clone()` was called on a class that doesn't implement `Cloneable`. | Part 2 (checked = compiler-enforced acknowledgment) |
+| `IOException` (and subtypes like `FileNotFoundException`, `EOFException`) | A failure during an I/O operation — a file that can't be opened/read/written, a stream that closes unexpectedly. Represents an external-world failure outside the JVM's control. | Part 2 (The Java Throwable Hierarchy), §5 |
+| `SQLException` | A failure interacting with a database — connection issues, constraint violations, malformed queries. External system, checked deliberately. | Part 2 (The Java Throwable Hierarchy), §5; Part 3 (Checked vs. Unchecked Exceptions, In Depth), §10 (Spring's unchecked-wrapping reaction) |
+| `ClassNotFoundException` | Code attempted to load a class by name (`Class.forName(...)`) and the class wasn't found on the classpath — an environment/configuration issue. | Part 2 (The Java Throwable Hierarchy), §5 |
+| `InterruptedException` | A thread was interrupted while blocked (e.g., in `Thread.sleep()`, `Object.wait()`). Checked specifically so a cancellation signal can never be silently ignored. | Part 2 (The Java Throwable Hierarchy), §5 |
+| `ParseException` | Text couldn't be parsed into a structured form (e.g., `SimpleDateFormat.parse()` on a malformed date string). | Part 2 (The Java Throwable Hierarchy) (external/malformed-input category) |
+| `CloneNotSupportedException` | `Object.clone()` was called on a class that doesn't implement `Cloneable`. | Part 2 (The Java Throwable Hierarchy) (checked = compiler-enforced acknowledgment) |
 
 ## `Error` (not meant to be caught in ordinary code)
 
 | Error | Typical cause | Course reference |
 |---|---|---|
-| `OutOfMemoryError` | The JVM heap (or another memory region) is exhausted and a new allocation can't be satisfied. Systemic, not localized — Part 21 covers why catching this is dangerous. | Part 21, §2 |
-| `StackOverflowError` | A call stack exceeded its limit — almost always unbounded or excessive recursion. One of the few `Error`s sometimes caught in narrow, isolated cases. | Part 21, §3 |
-| `ExceptionInInitializerError` | A static initializer threw during class initialization; wraps the original exception as its cause. | Part 19, §4 |
-| `NoClassDefFoundError` | A class that previously failed static initialization (or is missing at runtime despite being present at compile time) is referenced again. | Part 19, §5 |
-| `AssertionError` | An `assert` statement's condition evaluated to `false` (only active when assertions are enabled via `-ea`). Signals a violated internal invariant the code assumed could never happen. | Part 21 (design-adjacent — a "this should be impossible" signal) |
+| `OutOfMemoryError` | The JVM heap (or another memory region) is exhausted and a new allocation can't be satisfied. Systemic, not localized — Part 21 (Error vs. Exception: Senior-Level Understanding) covers why catching this is dangerous. | Part 21 (Error vs. Exception: Senior-Level Understanding), §2 |
+| `StackOverflowError` | A call stack exceeded its limit — almost always unbounded or excessive recursion. One of the few `Error`s sometimes caught in narrow, isolated cases. | Part 21 (Error vs. Exception: Senior-Level Understanding), §3 |
+| `ExceptionInInitializerError` | A static initializer threw during class initialization; wraps the original exception as its cause. | Part 19 (Exceptions During Initialization), §4 |
+| `NoClassDefFoundError` | A class that previously failed static initialization (or is missing at runtime despite being present at compile time) is referenced again. | Part 19 (Exceptions During Initialization), §5 |
+| `AssertionError` | An `assert` statement's condition evaluated to `false` (only active when assertions are enabled via `-ea`). Signals a violated internal invariant the code assumed could never happen. | Part 21 (Error vs. Exception: Senior-Level Understanding) (design-adjacent — a "this should be impossible" signal) |
 
 ### How to use this table with the rest of the course
 
-The table tells you *what* commonly throws and *when* — the "why does it belong in this category" reasoning (checked vs. unchecked vs. `Error`, and what that implies for handling) is in Part 2 and Part 3 for the structural placement, Part 15 for how to actually respond to each category, and Part 21 specifically for why the `Error` row is handled so differently from the other two.
+The table tells you *what* commonly throws and *when* — the "why does it belong in this category" reasoning (checked vs. unchecked vs. `Error`, and what that implies for handling) is in Part 2 (The Java Throwable Hierarchy) and Part 3 (Checked vs. Unchecked Exceptions, In Depth) for the structural placement, Part 15 (Exception Handling Principles) for how to actually respond to each category, and Part 21 (Error vs. Exception: Senior-Level Understanding) specifically for why the `Error` row is handled so differently from the other two.
