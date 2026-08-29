@@ -22,6 +22,12 @@ Drop a `.md` file into `notes/` or a subfolder, then refresh. The sidebar groups
 
 After each push to `main`, new notes appear on the hosted site.
 
+To stage note files, push `main`, and trigger Pages from the repo root:
+
+```bash
+npm run publish-site
+```
+
 ```bash
 npm run build
 ```
