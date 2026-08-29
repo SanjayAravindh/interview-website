@@ -178,6 +178,7 @@ body {
   font-family: var(--font-serif);
   line-height: 1.25;
   letter-spacing: -0.02em;
+  scroll-margin-top: 1.25rem;
 }
 
 .article h1 {

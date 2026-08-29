@@ -5,20 +5,74 @@
   const sidebarToggle = document.getElementById("sidebar-toggle");
 
   let notes = [];
+  let currentNote = null;
+  const slugState = { used: new Set() };
 
   marked.setOptions({
     gfm: true,
     breaks: false,
   });
 
+  marked.use({
+    renderer: {
+      heading(arg, level) {
+        if (typeof arg === "string") {
+          const slug = headingSlug(arg);
+          return `<h${level} id="${escapeHtml(slug)}">${arg}</h${level}>\n`;
+        }
+        const text = this.parser.parseInline(arg.tokens);
+        const slug = headingSlug(arg.text);
+        return `<h${arg.depth} id="${escapeHtml(slug)}">${text}</h${arg.depth}>\n`;
+      },
+    },
+  });
+
+  function headingSlug(text) {
+    const base = String(text)
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "section";
+    let slug = base;
+    let n = 1;
+    while (slugState.used.has(slug)) {
+      slug = `${base}-${n++}`;
+    }
+    slugState.used.add(slug);
+    return slug;
+  }
+
   function setPlaceholder(message, isError = false) {
     article.innerHTML = `<p class="${isError ? "error" : "placeholder"}">${message}</p>`;
   }
 
-  function getNoteByHash() {
-    const id = decodeURIComponent(location.hash.replace(/^#/, ""));
-    if (!id) return notes[0] || null;
+  function hashId() {
+    try {
+      return decodeURIComponent(location.hash.replace(/^#/, ""));
+    } catch {
+      return location.hash.replace(/^#/, "");
+    }
+  }
+
+  function findNoteById(id) {
+    if (!id) return null;
     return notes.find((note) => note.id === id) || null;
+  }
+
+  function noteIdFromUrl() {
+    const fromQuery = new URLSearchParams(location.search).get("note");
+    if (fromQuery) return fromQuery;
+    const fromHash = hashId();
+    return findNoteById(fromHash) ? fromHash : null;
+  }
+
+  function noteUrl(noteId, headingId) {
+    const url = new URL(location.href);
+    url.searchParams.set("note", noteId);
+    url.hash = headingId ? headingId : "";
+    return url;
   }
 
   function groupNotesByFolder(list) {
@@ -33,9 +87,10 @@
 
   function noteLink(note, activeId) {
     const active = note.id === activeId ? "active" : "";
+    const href = `?note=${encodeURIComponent(note.id)}`;
     return `
       <li>
-        <a href="#${encodeURIComponent(note.id)}" class="${active}" data-id="${escapeHtml(note.id)}">
+        <a href="${href}" class="${active}" data-id="${escapeHtml(note.id)}">
           ${escapeHtml(note.title)}
         </a>
       </li>
@@ -64,13 +119,22 @@
       .replaceAll('"', "&quot;");
   }
 
-  async function loadNote(note) {
+  function scrollToHeading(id) {
+    if (!id) return false;
+    const el = document.getElementById(id);
+    if (!el) return false;
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    return true;
+  }
+
+  async function loadNote(note, headingId) {
     if (!note) {
       setPlaceholder("No notes found. Drop a .md file into the notes/ folder, then refresh.");
       renderNav(null);
       return;
     }
 
+    currentNote = note;
     renderNav(note.id);
     setPlaceholder("Loading…");
 
@@ -80,24 +144,51 @@
         throw new Error(`Could not load ${note.file} (${response.status})`);
       }
       const markdown = await response.text();
+      slugState.used = new Set();
       article.innerHTML = marked.parse(markdown);
       if (window.hljs) {
         article.querySelectorAll("pre code").forEach((block) => {
           window.hljs.highlightElement(block);
         });
       }
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      if (headingId) {
+        scrollToHeading(headingId);
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } catch (error) {
       setPlaceholder(error.message || "Failed to load note.", true);
     }
   }
 
-  function syncFromHash() {
-    const note = getNoteByHash();
-    if (!location.hash && note) {
-      history.replaceState(null, "", `#${encodeURIComponent(note.id)}`);
+  function headingFromHash() {
+    const id = hashId();
+    return id && !findNoteById(id) ? id : "";
+  }
+
+  async function syncFromLocation({ replace = false } = {}) {
+    const selectedId = noteIdFromUrl();
+    const note = findNoteById(selectedId) || notes[0] || null;
+    const heading = headingFromHash();
+
+    if (note) {
+      const url = noteUrl(note.id, heading);
+      const method = replace ? "replaceState" : "pushState";
+      const current = location.pathname + location.search + location.hash;
+      const next = url.pathname + url.search + url.hash;
+      if (current !== next) {
+        history[method]({ note: note.id }, "", url);
+      }
     }
-    loadNote(note);
+
+    if (note && currentNote && currentNote.id === note.id) {
+      if (heading) scrollToHeading(heading);
+      else window.scrollTo({ top: 0, behavior: "smooth" });
+      renderNav(note.id);
+      return;
+    }
+
+    await loadNote(note, heading);
   }
 
   sidebarToggle.addEventListener("click", () => {
@@ -105,14 +196,56 @@
     sidebarToggle.setAttribute("aria-expanded", String(open));
   });
 
-  topicList.addEventListener("click", () => {
+  topicList.addEventListener("click", (event) => {
+    const link = event.target.closest("a[data-id]");
+    if (!link) return;
+    event.preventDefault();
+    const note = findNoteById(link.dataset.id);
+    if (!note) return;
+    const url = noteUrl(note.id);
+    history.pushState({ note: note.id }, "", url);
+    loadNote(note);
     if (window.matchMedia("(max-width: 860px)").matches) {
       sidebar.classList.remove("open");
       sidebarToggle.setAttribute("aria-expanded", "false");
     }
   });
 
-  window.addEventListener("hashchange", syncFromHash);
+  article.addEventListener("click", (event) => {
+    const link = event.target.closest("a[href]");
+    if (!link) return;
+    const href = link.getAttribute("href");
+    if (!href || !href.startsWith("#")) return;
+    event.preventDefault();
+    const id = decodeURIComponent(href.slice(1));
+    const note = findNoteById(id);
+    if (note) {
+      history.pushState({ note: note.id }, "", noteUrl(note.id));
+      loadNote(note);
+      return;
+    }
+    if (currentNote) {
+      history.pushState({ note: currentNote.id }, "", noteUrl(currentNote.id, id));
+    } else {
+      history.pushState(null, "", `#${encodeURIComponent(id)}`);
+    }
+    scrollToHeading(id);
+  });
+
+  window.addEventListener("hashchange", () => {
+    const id = hashId();
+    if (findNoteById(id) && !new URLSearchParams(location.search).get("note")) {
+      syncFromLocation({ replace: true });
+      return;
+    }
+    if (id && !findNoteById(id)) {
+      scrollToHeading(id);
+    }
+  });
+
+  window.addEventListener("popstate", () => {
+    syncFromLocation({ replace: true });
+  });
 
   async function loadNotesIndex() {
     const sources = ["api/notes", "notes.json"];
@@ -141,7 +274,7 @@
         renderNav(null);
         return;
       }
-      syncFromHash();
+      await syncFromLocation({ replace: true });
     } catch (error) {
       setPlaceholder(
         `${error.message}. Locally run node server.js. Hosted builds use notes.json.`,
