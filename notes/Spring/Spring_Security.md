@@ -6,30 +6,34 @@ Spring Security 6.x / Spring Boot 3.x. Servlet stack is the default path; reacti
 
 ## Table of Contents
 
-1. [Mental Model: One Request Through the Stack](#1-mental-model-one-request-through-the-stack)
-2. [Filter Chain Architecture](#2-filter-chain-architecture)
-3. [SecurityFilterChain](#3-securityfilterchain)
-4. [AuthenticationManager / ProviderManager](#4-authenticationmanager--providermanager)
-5. [UserDetailsService](#5-userdetailsservice)
-6. [Password Encoding](#6-password-encoding)
-7. [Session Management](#7-session-management)
-8. [CSRF](#8-csrf)
-9. [CORS](#9-cors)
-10. [Method Security](#10-method-security)
-11. [OAuth2 / OIDC — Client and Resource Server](#11-oauth2--oidc--client-and-resource-server)
-12. [JWT-Based Authentication](#12-jwt-based-authentication)
-13. [SAML 2.0 Basics](#13-saml-20-basics)
-14. [Multi-Factor Authentication](#14-multi-factor-authentication)
-15. [Access Control Lists (ACL)](#15-access-control-lists-acl)
-16. [Custom Filters](#16-custom-filters)
-17. [Exception Handling](#17-exception-handling)
-18. [Security Context Propagation](#18-security-context-propagation)
-19. [Testing Security Configurations](#19-testing-security-configurations)
-20. [Spring Security 6.x Changes](#20-spring-security-6x-changes)
-21. [Production Debugging Playbook](#21-production-debugging-playbook)
-22. [Quick Decision Matrix](#22-quick-decision-matrix)
+1. [1. Mental Model: One Request Through the Stack](#1-mental-model-one-request-through-the-stack)
+2. [2. Filter Chain Architecture](#2-filter-chain-architecture)
+3. [3. SecurityFilterChain](#3-securityfilterchain)
+4. [4. AuthenticationManager / ProviderManager](#4-authenticationmanager-providermanager)
+5. [5. UserDetailsService](#5-userdetailsservice)
+6. [6. Password Encoding](#6-password-encoding)
+7. [7. Session Management](#7-session-management)
+8. [8. CSRF](#8-csrf)
+9. [9. CORS](#9-cors)
+10. [10. Method Security](#10-method-security)
+11. [11. OAuth2 / OIDC — Client and Resource Server](#11-oauth2-oidc-client-and-resource-server)
+12. [12. JWT-Based Authentication](#12-jwt-based-authentication)
+13. [13. SAML 2.0 Basics](#13-saml-20-basics)
+14. [14. Multi-Factor Authentication](#14-multi-factor-authentication)
+15. [15. Access Control Lists (ACL)](#15-access-control-lists-acl)
+16. [16. Custom Filters](#16-custom-filters)
+17. [17. Exception Handling](#17-exception-handling)
+18. [18. Security Context Propagation](#18-security-context-propagation)
+19. [19. Testing Security Configurations](#19-testing-security-configurations)
+20. [20. Spring Security 6.x Changes](#20-spring-security-6x-changes)
+21. [21. Production Debugging Playbook](#21-production-debugging-playbook)
+22. [22. Quick Decision Matrix](#22-quick-decision-matrix)
 
 ---
+
+
+
+
 
 ## 1. Mental Model: One Request Through the Stack
 

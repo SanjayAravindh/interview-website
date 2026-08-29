@@ -2,6 +2,23 @@
 
 ---
 
+
+## Table of Contents
+
+1. [1. What Streams Are (and aren't)](#1-what-streams-are-and-arent)
+2. [2. Creating Streams](#2-creating-streams)
+3. [3. Intermediate Operations (lazy, return a Stream)](#3-intermediate-operations-lazy-return-a-stream)
+4. [4. Terminal Operations (eager, trigger execution)](#4-terminal-operations-eager-trigger-execution)
+5. [5. Collectors (the deep part)](#5-collectors-the-deep-part)
+6. [6. Primitive Streams](#6-primitive-streams)
+7. [7. Optional (streams' constant companion)](#7-optional-streams-constant-companion)
+8. [8. Parallel Streams](#8-parallel-streams)
+9. [9. Common Pitfalls](#9-common-pitfalls)
+10. [Quick Self-Check](#quick-self-check)
+
+---
+
+
 ## 1. What Streams Are (and aren't)
 
 A Stream is a **pipeline** over a data source (Collection, array, I/O channel, generator) that applies a sequence of computations. Key properties:
@@ -187,206 +204,6 @@ list.parallelStream()
 
 ---
 
-# Practice Problems (all topics, with answers)
-
-### Q1. Filter + map + collect
-Given `List<String> words`, return a list of uppercase words longer than 3 letters.
-
-```java
-List<String> result = words.stream()
-        .filter(w -> w.length() > 3)
-        .map(String::toUpperCase)
-        .collect(Collectors.toList());
-```
-
-### Q2. Sum of squares of even numbers
-```java
-int sum = IntStream.rangeClosed(1, 10)
-        .filter(n -> n % 2 == 0)
-        .map(n -> n * n)
-        .sum();
-// 4+16+36+64+100 = 220
-```
-
-### Q3. flatMap — flatten a list of lists
-```java
-List<List<Integer>> nested = List.of(List.of(1,2), List.of(3,4), List.of(5));
-List<Integer> flat = nested.stream()
-        .flatMap(List::stream)
-        .collect(Collectors.toList());
-// [1,2,3,4,5]
-```
-
-### Q4. Group employees by department
-```java
-Map<String, List<Employee>> byDept = employees.stream()
-        .collect(Collectors.groupingBy(Employee::getDepartment));
-```
-
-### Q5. Group + count per department
-```java
-Map<String, Long> countByDept = employees.stream()
-        .collect(Collectors.groupingBy(Employee::getDepartment, Collectors.counting()));
-```
-
-### Q6. Group + average salary per department
-```java
-Map<String, Double> avgSalaryByDept = employees.stream()
-        .collect(Collectors.groupingBy(Employee::getDepartment,
-                 Collectors.averagingDouble(Employee::getSalary)));
-```
-
-### Q7. Partition numbers into even/odd
-```java
-Map<Boolean, List<Integer>> partitioned = numbers.stream()
-        .collect(Collectors.partitioningBy(n -> n % 2 == 0));
-```
-
-### Q8. Find the highest-paid employee
-```java
-Optional<Employee> topEarner = employees.stream()
-        .max(Comparator.comparingDouble(Employee::getSalary));
-```
-
-### Q9. Sort by multiple fields
-Sort employees by department, then by salary descending.
-```java
-List<Employee> sorted = employees.stream()
-        .sorted(Comparator.comparing(Employee::getDepartment)
-                .thenComparing(Employee::getSalary, Comparator.reverseOrder()))
-        .collect(Collectors.toList());
-```
-
-### Q10. Distinct + joining
-Get a comma-separated string of unique departments.
-```java
-String depts = employees.stream()
-        .map(Employee::getDepartment)
-        .distinct()
-        .sorted()
-        .collect(Collectors.joining(", "));
-```
-
-### Q11. reduce — find product of a list
-```java
-int product = List.of(1,2,3,4).stream()
-        .reduce(1, (a,b) -> a * b);
-// 24
-```
-
-### Q12. reduce — find the longest string
-```java
-Optional<String> longest = words.stream()
-        .reduce((a,b) -> a.length() >= b.length() ? a : b);
-```
-
-### Q13. Convert list to Map (name -> salary), handling duplicate keys
-```java
-Map<String, Double> nameToSalary = employees.stream()
-        .collect(Collectors.toMap(Employee::getName, Employee::getSalary,
-                 (existing, replacement) -> existing));
-```
-
-### Q14. Check if all/any/none match a condition
-```java
-boolean allAdults   = people.stream().allMatch(p -> p.getAge() >= 18);
-boolean anyMinor    = people.stream().anyMatch(p -> p.getAge() < 18);
-boolean noneNegative = people.stream().noneMatch(p -> p.getAge() < 0);
-```
-
-### Q15. Word frequency counter
-```java
-String text = "the quick brown fox the lazy dog the fox";
-Map<String, Long> freq = Arrays.stream(text.split(" "))
-        .collect(Collectors.groupingBy(w -> w, Collectors.counting()));
-// {the=3, quick=1, brown=1, fox=2, lazy=1, dog=1}
-```
-
-### Q16. Find the second-highest number
-```java
-Optional<Integer> second = numbers.stream()
-        .distinct()
-        .sorted(Comparator.reverseOrder())
-        .skip(1)
-        .findFirst();
-```
-
-### Q17. Sum using IntStream vs boxed reduce (know the difference)
-```java
-// Preferred - no boxing
-int sum1 = numbers.stream().mapToInt(Integer::intValue).sum();
-
-// Works but boxes every element
-int sum2 = numbers.stream().reduce(0, Integer::sum);
-```
-
-### Q18. Custom Collector with teeing (Java 12+)
-Get min and max in a single pass.
-```java
-var minMax = numbers.stream()
-        .collect(Collectors.teeing(
-                Collectors.minBy(Integer::compareTo),
-                Collectors.maxBy(Integer::compareTo),
-                (min, max) -> min.get() + " - " + max.get()));
-```
-
-### Q19. Infinite stream with iterate + limit
-Generate first 10 Fibonacci numbers.
-```java
-Stream.iterate(new int[]{0,1}, f -> new int[]{f[1], f[0]+f[1]})
-        .limit(10)
-        .map(f -> f[0])
-        .forEach(System.out::println);
-```
-
-### Q20. Parallel stream pitfall — spot the bug
-```java
-List<Integer> results = new ArrayList<>();
-numbers.parallelStream().forEach(results::add);   // BUG: ArrayList not thread-safe
-```
-**Fix:** use `.collect(Collectors.toList())` instead of a side-effecting `forEach`, or use a `synchronizedList` / `Collectors.toCollection(CopyOnWriteArrayList::new)`.
-
-### Q21. Stream reuse bug — spot it
-```java
-Stream<String> s = names.stream();
-long count = s.count();
-s.forEach(System.out::println);  // throws IllegalStateException
-```
-**Fix:** create a new stream for each terminal operation (`names.stream()` again), or collect once into a `List` and iterate that.
-
-### Q22. groupingBy with a nested downstream collector
-Group employees by department, and within each get a list of names only.
-```java
-Map<String, List<String>> namesByDept = employees.stream()
-        .collect(Collectors.groupingBy(Employee::getDepartment,
-                 Collectors.mapping(Employee::getName, Collectors.toList())));
-```
-
-### Q23. Convert Map<K,V> to Stream and back
-```java
-Map<String, Integer> scores = Map.of("A", 90, "B", 75, "C", 60);
-Map<String, String> grades = scores.entrySet().stream()
-        .collect(Collectors.toMap(Map.Entry::getKey,
-                 e -> e.getValue() >= 80 ? "Pass" : "Fail"));
-```
-
-### Q24. IntSummaryStatistics — get min, max, avg, sum in one pass
-```java
-IntSummaryStatistics stats = numbers.stream()
-        .mapToInt(Integer::intValue)
-        .summaryStatistics();
-System.out.println(stats.getMin() + " " + stats.getMax() + " " + stats.getAverage());
-```
-
-### Q25. Chained Optional pipeline
-Given an `Optional<Employee>`, get the department name in uppercase, defaulting to "UNKNOWN".
-```java
-String dept = optionalEmployee
-        .map(Employee::getDepartment)
-        .map(String::toUpperCase)
-        .orElse("UNKNOWN");
-```
-
 ---
 
 ## Quick Self-Check
@@ -396,3 +213,308 @@ If you can explain **why** each of these is true, you've got the topic solid:
 3. Why is `parallelStream()` often slower on a list of 10 elements?
 4. Why does `peek` sometimes not run if nothing downstream consumes the stream?
 5. Why is `Stream.iterate(1, n -> n+1)` dangerous without `limit` or the bounded overload?
+
+
+---
+
+## Practice Questions & Answers
+
+### Practice Problems (all topics, with answers)
+
+<details class="qa-item">
+<summary>Q1. Filter + map + collect</summary>
+
+Given `List<String> words`, return a list of uppercase words longer than 3 letters.
+
+```java
+List<String> result = words.stream()
+        .filter(w -> w.length() > 3)
+        .map(String::toUpperCase)
+        .collect(Collectors.toList());
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q2. Sum of squares of even numbers</summary>
+
+```java
+int sum = IntStream.rangeClosed(1, 10)
+        .filter(n -> n % 2 == 0)
+        .map(n -> n * n)
+        .sum();
+// 4+16+36+64+100 = 220
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q3. flatMap — flatten a list of lists</summary>
+
+```java
+List<List<Integer>> nested = List.of(List.of(1,2), List.of(3,4), List.of(5));
+List<Integer> flat = nested.stream()
+        .flatMap(List::stream)
+        .collect(Collectors.toList());
+// [1,2,3,4,5]
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q4. Group employees by department</summary>
+
+```java
+Map<String, List<Employee>> byDept = employees.stream()
+        .collect(Collectors.groupingBy(Employee::getDepartment));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q5. Group + count per department</summary>
+
+```java
+Map<String, Long> countByDept = employees.stream()
+        .collect(Collectors.groupingBy(Employee::getDepartment, Collectors.counting()));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q6. Group + average salary per department</summary>
+
+```java
+Map<String, Double> avgSalaryByDept = employees.stream()
+        .collect(Collectors.groupingBy(Employee::getDepartment,
+                 Collectors.averagingDouble(Employee::getSalary)));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q7. Partition numbers into even/odd</summary>
+
+```java
+Map<Boolean, List<Integer>> partitioned = numbers.stream()
+        .collect(Collectors.partitioningBy(n -> n % 2 == 0));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q8. Find the highest-paid employee</summary>
+
+```java
+Optional<Employee> topEarner = employees.stream()
+        .max(Comparator.comparingDouble(Employee::getSalary));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q9. Sort by multiple fields</summary>
+
+Sort employees by department, then by salary descending.
+```java
+List<Employee> sorted = employees.stream()
+        .sorted(Comparator.comparing(Employee::getDepartment)
+                .thenComparing(Employee::getSalary, Comparator.reverseOrder()))
+        .collect(Collectors.toList());
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q10. Distinct + joining</summary>
+
+Get a comma-separated string of unique departments.
+```java
+String depts = employees.stream()
+        .map(Employee::getDepartment)
+        .distinct()
+        .sorted()
+        .collect(Collectors.joining(", "));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q11. reduce — find product of a list</summary>
+
+```java
+int product = List.of(1,2,3,4).stream()
+        .reduce(1, (a,b) -> a * b);
+// 24
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q12. reduce — find the longest string</summary>
+
+```java
+Optional<String> longest = words.stream()
+        .reduce((a,b) -> a.length() >= b.length() ? a : b);
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q13. Convert list to Map (name -> salary), handling duplicate keys</summary>
+
+```java
+Map<String, Double> nameToSalary = employees.stream()
+        .collect(Collectors.toMap(Employee::getName, Employee::getSalary,
+                 (existing, replacement) -> existing));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q14. Check if all/any/none match a condition</summary>
+
+```java
+boolean allAdults   = people.stream().allMatch(p -> p.getAge() >= 18);
+boolean anyMinor    = people.stream().anyMatch(p -> p.getAge() < 18);
+boolean noneNegative = people.stream().noneMatch(p -> p.getAge() < 0);
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q15. Word frequency counter</summary>
+
+```java
+String text = "the quick brown fox the lazy dog the fox";
+Map<String, Long> freq = Arrays.stream(text.split(" "))
+        .collect(Collectors.groupingBy(w -> w, Collectors.counting()));
+// {the=3, quick=1, brown=1, fox=2, lazy=1, dog=1}
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q16. Find the second-highest number</summary>
+
+```java
+Optional<Integer> second = numbers.stream()
+        .distinct()
+        .sorted(Comparator.reverseOrder())
+        .skip(1)
+        .findFirst();
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q17. Sum using IntStream vs boxed reduce (know the difference)</summary>
+
+```java
+// Preferred - no boxing
+int sum1 = numbers.stream().mapToInt(Integer::intValue).sum();
+
+// Works but boxes every element
+int sum2 = numbers.stream().reduce(0, Integer::sum);
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q18. Custom Collector with teeing (Java 12+)</summary>
+
+Get min and max in a single pass.
+```java
+var minMax = numbers.stream()
+        .collect(Collectors.teeing(
+                Collectors.minBy(Integer::compareTo),
+                Collectors.maxBy(Integer::compareTo),
+                (min, max) -> min.get() + " - " + max.get()));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q19. Infinite stream with iterate + limit</summary>
+
+Generate first 10 Fibonacci numbers.
+```java
+Stream.iterate(new int[]{0,1}, f -> new int[]{f[1], f[0]+f[1]})
+        .limit(10)
+        .map(f -> f[0])
+        .forEach(System.out::println);
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q20. Parallel stream pitfall — spot the bug</summary>
+
+```java
+List<Integer> results = new ArrayList<>();
+numbers.parallelStream().forEach(results::add);   // BUG: ArrayList not thread-safe
+```
+**Fix:** use `.collect(Collectors.toList())` instead of a side-effecting `forEach`, or use a `synchronizedList` / `Collectors.toCollection(CopyOnWriteArrayList::new)`.
+
+</details>
+
+<details class="qa-item">
+<summary>Q21. Stream reuse bug — spot it</summary>
+
+```java
+Stream<String> s = names.stream();
+long count = s.count();
+s.forEach(System.out::println);  // throws IllegalStateException
+```
+**Fix:** create a new stream for each terminal operation (`names.stream()` again), or collect once into a `List` and iterate that.
+
+</details>
+
+<details class="qa-item">
+<summary>Q22. groupingBy with a nested downstream collector</summary>
+
+Group employees by department, and within each get a list of names only.
+```java
+Map<String, List<String>> namesByDept = employees.stream()
+        .collect(Collectors.groupingBy(Employee::getDepartment,
+                 Collectors.mapping(Employee::getName, Collectors.toList())));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q23. Convert Map<K,V> to Stream and back</summary>
+
+```java
+Map<String, Integer> scores = Map.of("A", 90, "B", 75, "C", 60);
+Map<String, String> grades = scores.entrySet().stream()
+        .collect(Collectors.toMap(Map.Entry::getKey,
+                 e -> e.getValue() >= 80 ? "Pass" : "Fail"));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q24. IntSummaryStatistics — get min, max, avg, sum in one pass</summary>
+
+```java
+IntSummaryStatistics stats = numbers.stream()
+        .mapToInt(Integer::intValue)
+        .summaryStatistics();
+System.out.println(stats.getMin() + " " + stats.getMax() + " " + stats.getAverage());
+```
+
+</details>
+
+<details class="qa-item">
+<summary>Q25. Chained Optional pipeline</summary>
+
+Given an `Optional<Employee>`, get the department name in uppercase, defaulting to "UNKNOWN".
+```java
+String dept = optionalEmployee
+        .map(Employee::getDepartment)
+        .map(String::toUpperCase)
+        .orElse("UNKNOWN");
+```
+
+</details>

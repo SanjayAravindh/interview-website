@@ -2,6 +2,38 @@
 
 ---
 
+
+
+## Table of Contents
+
+1. [Part 1: Spring Philosophy & IoC Fundamentals](#part-1-spring-philosophy-ioc-fundamentals)
+2. [Part 2: BeanFactory vs ApplicationContext](#part-2-beanfactory-vs-applicationcontext)
+3. [Part 3: Configuration Metadata — XML, Annotation, and Java Config Compared](#part-3-configuration-metadata-xml-annotation-and-java-config-compared)
+4. [Part 4: Dependency Injection Types — Constructor, Setter, and Field Injection](#part-4-dependency-injection-types-constructor-setter-and-field-injection)
+5. [Part 5: Autowiring & Ambiguity Resolution](#part-5-autowiring-ambiguity-resolution)
+6. [Part 6: Bean Scopes](#part-6-bean-scopes)
+7. [Part 7: Bean Lifecycle](#part-7-bean-lifecycle)
+8. [Part 8: BeanPostProcessor & BeanFactoryPostProcessor](#part-8-beanpostprocessor-beanfactorypostprocessor)
+9. [Part 9: Circular Dependencies](#part-9-circular-dependencies)
+10. [Part 10: Component Scanning](#part-10-component-scanning)
+11. [Part 11: Java Config Deep Dive](#part-11-java-config-deep-dive)
+12. [Part 12: Environment Abstraction — Profiles, PropertySources, `@Value`](#part-12-environment-abstraction-profiles-propertysources-value)
+13. [Part 13: SpEL (Spring Expression Language)](#part-13-spel-spring-expression-language)
+14. [Part 14: Resource Abstraction](#part-14-resource-abstraction)
+15. [Part 15: Application Events](#part-15-application-events)
+16. [Part 16: AOP Concepts — Proxies, JDK Dynamic Proxy vs CGLIB](#part-16-aop-concepts-proxies-jdk-dynamic-proxy-vs-cglib)
+17. [Part 17: AOP Implementation — `@Aspect`, Pointcut Expressions, Advice Types](#part-17-aop-implementation-aspect-pointcut-expressions-advice-types)
+18. [Part 18: AOP Internals & Pitfalls — Self-Invocation, Proxy Limitations](#part-18-aop-internals-pitfalls-self-invocation-proxy-limitations)
+19. [Part 19: Type Conversion & Data Binding](#part-19-type-conversion-data-binding)
+20. [Part 20: Validation](#part-20-validation)
+21. [Part 21: Task Execution & Scheduling](#part-21-task-execution-scheduling)
+22. [Part 22: FactoryBean & Advanced Bean Creation](#part-22-factorybean-advanced-bean-creation)
+23. [Part 23: ApplicationContext Hierarchies](#part-23-applicationcontext-hierarchies)
+24. [Part 24: Testing Spring Applications](#part-24-testing-spring-applications)
+25. [Part 25: Production/Debugging Capstone — Synthesizing Everything](#part-25-productiondebugging-capstone-synthesizing-everything)
+
+---
+
 # Part 1: Spring Philosophy & IoC Fundamentals
 
 ## Why Spring exists
@@ -82,25 +114,6 @@ A constructor with 14 injected dependencies works — Spring will happily wire i
 - **Mitigate:** Roll back if this surfaces post-deploy.
 - **Fix:** Correct the scan path/annotation/condition.
 
-## Practice Exercises & Answers
-
-**1.** IoC vs DI, without "container"? — IoC is the general principle that control over object creation/flow is handed to an external mechanism. DI is the specific technique of supplying dependencies from outside rather than self-construction.
-
-**2.** Rewrite `ReportGenerator` with constructor injection:
-```java
-interface Exporter { void export(Report r); }
-class PdfExporter implements Exporter { public void export(Report r) { } }
-class ReportGenerator {
-    private final Exporter exporter;
-    ReportGenerator(Exporter exporter) { this.exporter = exporter; }
-}
-```
-Benefit: tests can pass a `FakeExporter` instead of a real one.
-
-**3.** True/false: every bean must be `@Component`? — False. `BeanDefinition` is the common thread; `@Bean` methods, XML, and programmatic registration all work too.
-
----
-
 # Part 2: BeanFactory vs ApplicationContext
 
 ## The interface hierarchy
@@ -147,16 +160,6 @@ A new `@Component` wrapping a third-party SDK does slow synchronous I/O in its c
 ## Debugging scenario: `@Autowired` field null when object is manually `new`'d
 
 `@Autowired` is processed by `AutowiredAnnotationBeanPostProcessor`, which only runs on container-instantiated objects. `new ReportScheduler()` bypasses the container entirely. Fix: let Spring manage it, or use `AutowireCapableBeanFactory.autowireBean()`.
-
-## Practice Exercises & Answers
-
-**1.** Why is fail-fast a feature? — Surfaces broken config deterministically at startup/deploy rather than unpredictably in production traffic.
-
-**2.** "I'll use BeanFactory directly, it's lighter" — Loses automatic post-processor registration, meaning `@Autowired`/`@Transactional`/AOP would need manual wiring; the "savings" aren't worth it.
-
-**3.** Another null-`@Autowired` case — Objects created via plain `new` inside a `@Bean` method body, or deserialized from JSON/a queue payload — neither goes through the container.
-
----
 
 # Part 3: Configuration Metadata — XML, Annotation, and Java Config Compared
 
@@ -255,16 +258,6 @@ Doubling a `HikariDataSource` because one `@Bean` method called another directly
 
 `BeanDefinitionStoreException` from a leftover XML `<bean id="dataSource">` still imported alongside a new `@Bean` of the same name. Boot disallows overriding by default since 2.1 specifically to catch this.
 
-## Practice Exercises & Answers
-
-**1.** `RestTemplate` — `@Bean`, since you don't own its source.
-
-**2.** CGLIB proxying of `@Configuration` prevents a `@Bean` method called from another `@Bean` method within the class from creating a second, duplicate instance — it redirects the call to fetch the existing singleton.
-
-**3.** With `proxyBeanMethods = false`, declare dependencies as method parameters rather than calling other `@Bean` methods directly.
-
----
-
 # Part 4: Dependency Injection Types — Constructor, Setter, and Field Injection
 
 ## The three mechanisms
@@ -316,24 +309,6 @@ A missing bean combined with defensive `required = false` usage converted a star
 ## Debugging scenario: `UnsatisfiedDependencyException` only in test context
 
 A constructor gained a new parameter but the test's mock setup wasn't updated — constructor injection surfaces this precisely (parameter index named in the exception).
-
-## Practice Exercises & Answers
-
-**1.** Three reasons for constructor injection: immutability, guaranteed non-null state, testability without a container (plus circular-dependency fail-fast and visible design smells).
-
-**2.** Setter injection is right when a dependency is genuinely optional.
-
-**3.**
-```java
-@Service
-@RequiredArgsConstructor
-public class InvoiceService {
-    private final TaxCalculator taxCalculator;
-    private final PdfGenerator pdfGenerator;
-}
-```
-
----
 
 # Part 5: Autowiring & Ambiguity Resolution
 
@@ -387,25 +362,6 @@ A stray test-support `@Component` with no `@Primary` created latent ambiguity th
 
 A misspelled qualifier name eliminates nothing, leaving full ambiguity and a `NoUniqueBeanDefinitionException` despite the qualifier being present.
 
-## Practice Exercises & Answers
-
-**1.** Forcing explicit disambiguation everywhere: use `@Qualifier` on every site, avoid `@Primary` (which creates a silent default).
-
-**2.** `@Autowired`+`@Qualifier` resolves by type first; `@Resource` resolves by name first.
-
-**3.**
-```java
-@Service
-public class NotificationDispatcher {
-    private final Map<String, NotificationChannel> channels;
-    public NotificationDispatcher(Map<String, NotificationChannel> channels) { this.channels = channels; }
-    void notifyVia(String channelName, String msg) { channels.get(channelName).send(msg); }
-}
-```
-Use case: dispatch by a user's stored channel preference without an if/else chain.
-
----
-
 # Part 6: Bean Scopes
 
 ## Built-in scopes
@@ -447,16 +403,6 @@ A mutable `HashMap` field on a default-singleton `@Service` caused intermittent 
 
 File-descriptor leak from assuming prototype beans get full managed lifecycle. Fix: don't rely on `@PreDestroy` for prototype cleanup — use try-with-resources instead.
 
-## Practice Exercises & Answers
-
-**1.** Field-injecting a prototype into a singleton resolves once at construction. Fixes: `ObjectProvider` or scoped proxy.
-
-**2.** "Singleton means thread-safe" is wrong — one shared instance actually increases the need for thread-safety discipline.
-
-**3.** The container hands off prototype instances and loses track of them — no way to know when it's safe to destroy.
-
----
-
 # Part 7: Bean Lifecycle
 
 ## The full pipeline, in order
@@ -493,16 +439,6 @@ Rolling deploys caused brief spikes of "Connection is closed" errors because the
 ## Debugging scenario: `@Transactional` silently not applying inside `@PostConstruct`
 
 Calling a `@Transactional` method on `this` from `@PostConstruct` runs it unproxied — the proxy doesn't exist yet at that lifecycle point. Fix: use `ApplicationListener<ContextRefreshedEvent>` or `ApplicationRunner` instead, injecting the bean from outside.
-
-## Practice Exercises & Answers
-
-**1.** Order: constructor → setter injection → `postProcessBeforeInitialization` → `@PostConstruct` → `postProcessAfterInitialization`.
-
-**2.** `@PostConstruct` runs after `Aware` callbacks and any setter/field injection, and keeps initialization separately testable from field assignment.
-
-**3.** `SIGKILL` before graceful shutdown/`@PreDestroy` completes. Fix: enable graceful shutdown and a sufficient grace period.
-
----
 
 # Part 8: BeanPostProcessor & BeanFactoryPostProcessor
 
@@ -541,16 +477,6 @@ Eagerly injecting `MeterRegistry` into a custom processor forced it to instantia
 
 A `final` class or `final`/`private` method can't be CGLIB-proxied — Spring silently skips proxying, no error. Fix: remove `final`, or restructure into a proxyable collaborator.
 
-## Practice Exercises & Answers
-
-**1.** `BeanFactoryPostProcessor` touches definitions/metadata pre-instantiation; `BeanPostProcessor` touches instances during lifecycle.
-
-**2.** `AnnotationAwareAspectJAutoProxyCreator`; runs in `postProcessAfterInitialization` so it wraps the fully-initialized bean.
-
-**3.** CGLIB can't subclass a `final` class — proxying is silently skipped or the method isn't overridden.
-
----
-
 # Part 9: Circular Dependencies
 
 ## The problem
@@ -584,16 +510,6 @@ CI caught a new `BeanCurrentlyInCreationException` immediately — the good outc
 ## Debugging scenario: `@Lazy` "fix" causing a subtle later NPE
 
 `@Lazy` converted a loud, immediate startup failure into a quiet, delayed, hard-to-reproduce runtime failure — a strictly worse trade unless redesign genuinely isn't feasible, and even then should be tracked as tech debt.
-
-## Practice Exercises & Answers
-
-**1.** Field injection can hand out a raw, shared-identity instance early; constructor injection has no partially-built object to hand out.
-
-**2.** Most to least preferable: extract shared collaborator > `@Lazy` > field/setter injection.
-
-**3.** A conditional/profile-gated bean differs between environments, so the cycle only manifests where both sides are actually active.
-
----
 
 # Part 10: Component Scanning
 
@@ -635,16 +551,6 @@ A typo'd package fell outside the scan root; masked locally by a stale test-supp
 
 Two same-named classes in different packages collide on the default bean name. Fix: explicit bean names; remove the lingering duplicate.
 
-## Practice Exercises & Answers
-
-**1.** `@Service` = `@Component`, no functional difference. `@Repository` does differ (exception translation).
-
-**2.** A sibling package isn't scanned by default. Fixes: widen `basePackages`, or move the app class to the common parent package.
-
-**3.** `useDefaultFilters = false` disables auto-detection of stereotypes entirely; useful for plugin-style architectures with a custom marker annotation.
-
----
-
 # Part 11: Java Config Deep Dive
 
 ## `@Import`
@@ -679,16 +585,6 @@ A Boot upgrade reordered auto-configuration classes, causing a custom `ObjectMap
 ## Debugging scenario: `@Profile` typo in the active profile string
 
 An unrecognized profile name silently excludes every gated bean, no warning. Fix: correct the typo; add a startup assertion validating active profiles.
-
-## Practice Exercises & Answers
-
-**1.** `@EnableAsync` uses `@Import` internally to pull in the config registering the `@Async`-detecting `BeanPostProcessor`.
-
-**2.** `@ConditionalOnBean` requires a match to exist; `@ConditionalOnMissingBean` requires none to exist yet — ordering determines which config class "wins" the race.
-
-**3.** A custom `Condition` via raw `@Conditional`, checking the environment variable directly.
-
----
 
 # Part 12: Environment Abstraction — Profiles, PropertySources, `@Value`
 
@@ -736,16 +632,6 @@ A stale plaintext password in `application.yml` was still visible via `/actuator
 
 Lombok's immutable `@Value` (unrelated to Spring's `@Value`) generated no setters, so Boot's relaxed binder silently produced an empty collection. Fix: mutable fields with setters, or `@ConstructorBinding`.
 
-## Practice Exercises & Answers
-
-**1.** Env var wins — higher precedence, relaxed-bound to the same key.
-
-**2.** Type-safe group binding + nested structure support (any two of the listed reasons).
-
-**3.** It's still exposed via version control, artifacts, and introspection tooling like `/actuator/env`, regardless of whether it drives runtime behavior.
-
----
-
 # Part 13: SpEL (Spring Expression Language)
 
 ## Where it shows up
@@ -772,16 +658,6 @@ A key expression omitting user identity caused one user's recommendations to lea
 
 `${...}` substitution happens before SpEL parsing — a malformed resolved property value corrupts the resulting SpEL syntax. Fix: keep SpEL in annotations simple; move branching logic into real Java code.
 
-## Practice Exercises & Answers
-
-**1.** `${...}` is plain substitution; `#{...}` is full SpEL; nested, the placeholder resolves first, then the result is parsed as SpEL.
-
-**2.** `@PostAuthorize` needs `returnObject` — only a full expression language can reference a value that only exists at evaluation time.
-
-**3.** RCE-class risk from unrestricted method/constructor invocation; use `SimpleEvaluationContext` or a constrained purpose-built syntax instead of raw SpEL.
-
----
-
 # Part 14: Resource Abstraction
 
 ## The `Resource` interface
@@ -803,16 +679,6 @@ Unifies filesystem, classpath, URL, and in-memory content behind one contract. I
 ## Debugging scenario: `classpath*:` returning fewer resources after uber-JAR shading
 
 Merging JARs collapses same-path entries into one, so `classpath*:` has nothing distinct left to find. Fix: use Boot's nested-JAR fat-jar format instead of flat merging, or use plugin-specific file names.
-
-## Practice Exercises & Answers
-
-**1.** No valid filesystem path exists for a JAR zip entry; use `getInputStream()`.
-
-**2.** `classpath:` = first match only; `classpath*:` = all matches across every classpath root. Wrong choice silently drops contributions from some modules.
-
-**3.** `@PropertySource(value = "file:...", ignoreResourceNotFound = true)`.
-
----
 
 # Part 15: Application Events
 
@@ -861,16 +727,6 @@ Incrementally added listeners each added latency directly to checkout response t
 
 A `@Transactional` test rolls back rather than committing, so `AFTER_COMMIT` never fires — expected behavior, not a bug.
 
-## Practice Exercises & Answers
-
-**1.** Synchronous by default. Consequences: latency is additive; listener exceptions can break the publisher's operation.
-
-**2.** A plain listener fires before commit — a rolled-back transaction still triggers the "confirmation," a real data inconsistency, not just performance.
-
-**3.** `@Transactional` tests roll back rather than commit, so the commit event the listener needs never occurs.
-
----
-
 # Part 16: AOP Concepts — Proxies, JDK Dynamic Proxy vs CGLIB
 
 ## Terminology
@@ -903,16 +759,6 @@ Mocking/injecting the concrete type instead of the interface caused mismatched r
 ## Debugging scenario: `ClassCastException` after switching proxy target mode
 
 A JDK dynamic proxy is not a subclass of the concrete class — casting fails. CGLIB's proxy is a real subclass, which is part of why Boot defaults to it — but casting to concrete types is still bad practice.
-
-## Practice Exercises & Answers
-
-**1.** Join point = a point where advice could apply; pointcut = expression selecting which join points; advice = the code that runs at matches.
-
-**2.** CGLIB. Constraints: can't proxy `final` classes/methods; can never advise `private` methods.
-
-**3.** AspectJ weaves directly into bytecode, so `this` calls are advised too; Spring AOP's proxy is a separate external object that `this` calls never pass through.
-
----
 
 # Part 17: AOP Implementation — `@Aspect`, Pointcut Expressions, Advice Types
 
@@ -957,16 +803,6 @@ A rate-limiting semaphore never released on exception paths, draining permits un
 
 A cache-key collision caused a real batch job to hit a stale cached (empty) result and never call `proceed()` at all. Fix: rigor around cache-key uniqueness in hand-rolled aspects, same as `@Cacheable`.
 
-## Practice Exercises & Answers
-
-**1.** `execution(public * com.acme.orders..*.*(..))` — single dot excludes sub-packages.
-
-**2.** `@Around`; must call `pjp.proceed()`.
-
-**3.** `SecurityAspect` (lower `@Order`) runs first for `@Before` advice.
-
----
-
 # Part 18: AOP Internals & Pitfalls — Self-Invocation, Proxy Limitations
 
 ## Self-invocation, precisely
@@ -996,16 +832,6 @@ Static methods can never be advised. Constructors can never be advised. Package-
 
 Not self-invocation this time — a caught-and-swallowed exception never reached the proxy boundary at all, so the transaction correctly (from the proxy's perspective) committed. Fix: rethrow, or explicitly call `setRollbackOnly()`.
 
-## Practice Exercises & Answers
-
-**1.** Direct dispatch on `this` never routes through the separate external proxy object; the proxy is only reached via DI-injected references from outside.
-
-**2.** Extraction > self-injection > `AopContext.currentProxy()` > full AspectJ, because extraction also fixes the likely underlying design issue.
-
-**3.** Nothing — `@Transactional` on a `static` method is silently ignored, since AOP proxying only intercepts instance method dispatch.
-
----
-
 # Part 19: Type Conversion & Data Binding
 
 ## Three mechanisms
@@ -1033,16 +859,6 @@ An overly broad exception handler substituted `null` for an invalid date paramet
 ## Debugging scenario: a custom `Converter` bean not picked up
 
 Generic type erasure through an intermediate abstract base class prevented Spring from associating the converter with its type pair. Fix: implement `Converter<S,T>` directly, or register manually via `WebMvcConfigurer`.
-
-## Practice Exercises & Answers
-
-**1.** `Converter` is plain, locale-agnostic, one-directional; `Formatter` is locale-aware and bidirectional — needed for user-facing display/input.
-
-**2.** Mass assignment: blind binding of any request field onto a target object. Mitigations: dedicated DTOs, explicit allowlisting.
-
-**3.** Generic type parameters unresolvable via reflection due to an intermediate generic abstract base class.
-
----
 
 # Part 20: Validation
 
@@ -1086,16 +902,6 @@ A batch job calling a validated method on `this` bypassed `@Min(0)` checking, oc
 
 JSR-303 doesn't auto-cascade into nested objects; a missing `@Valid` on the containing field means the nested object's constraints are never evaluated at all.
 
-## Practice Exercises & Answers
-
-**1.** `@NotNull` rejects only null; `@NotEmpty` also rejects empty string; `@NotBlank` also rejects whitespace-only — the right choice for required text.
-
-**2.** Validation groups: `@Validated(Group.class)` + `groups = {...}` on constraints.
-
-**3.** Method validation is AOP-proxy-based (`MethodValidationPostProcessor`), so it inherits the same self-invocation bypass as `@Transactional`/`@Async`/`@Cacheable`.
-
----
-
 # Part 21: Task Execution & Scheduling
 
 ## `@Async`
@@ -1136,16 +942,6 @@ A partner API health-check with no read timeout hung intermittently, and because
 
 Either self-invocation (Part 18) or an unproxyable `final` class/method. Distinguish by whether the caller is internal or external.
 
-## Practice Exercises & Answers
-
-**1.** `SimpleAsyncTaskExecutor` — unbounded thread-per-invocation, real OOM/exhaustion risk under load.
-
-**2.** `fixedRate` measures from start (can back up under slow execution); `fixedDelay` measures from end (self-paces).
-
-**3.** All nine other jobs queue behind the hung one on the shared single thread. Fix: configure a multi-threaded `ThreadPoolTaskScheduler`.
-
----
-
 # Part 22: FactoryBean & Advanced Bean Creation
 
 ## `FactoryBean<T>` vs `BeanFactory` — not the same thing
@@ -1181,16 +977,6 @@ Consumer-side (lazily obtain a bean) vs producer-side (define how a bean is crea
 
 Setter-injected config on a `FactoryBean` could be read by `getObject()` before injection completed. Fix: prefer constructor injection for the FactoryBean's own configuration.
 
-## Practice Exercises & Answers
-
-**1.** You get the product (`Widget`), not the `FactoryBean` itself; use `&beanName` for the latter.
-
-**2.** Precise `getObjectType()` lets the container reason about type before instantiating, improving autowiring resolution and error clarity.
-
-**3.** `ObjectFactory`/`ObjectProvider` = consumer-side (lazy obtain); `FactoryBean` = producer-side (defines creation).
-
----
-
 # Part 23: ApplicationContext Hierarchies
 
 ## One-directional visibility
@@ -1216,16 +1002,6 @@ A `CacheManager` defined only in the child context was invisible to root beans, 
 ## Debugging scenario: a custom BeanPostProcessor "not working" for controllers only
 
 Processor registered only in root's scan; controllers live in the isolated child context. Fix: register in both, or consolidate to a single flat context.
-
-## Practice Exercises & Answers
-
-**1.** Child sees parent; parent never sees child — the parent has no structural awareness that children exist.
-
-**2.** Multiple `DispatcherServlet`s sharing common business-layer beans without duplication, while keeping web layers independent.
-
-**3.** Each context manages its own post-processor registrations and lifecycle independently — no automatic cross-context reach.
-
----
 
 # Part 24: Testing Spring Applications
 
@@ -1257,16 +1033,6 @@ Dozens of `@SpringBootTest` classes each with ad-hoc, slightly different `@MockB
 
 An earlier test mutated shared cached-context singleton state without resetting it. Fix: `@DirtiesContext` (accepting the cost) or, better, avoid mutating shared singleton state at all.
 
-## Practice Exercises & Answers
-
-**1.** Exact match of config classes, profiles, properties, and especially `@MockBean`/`@SpyBean` set/customizers.
-
-**2.** Each distinct mock combination is its own cache key, silently multiplying rebuilt contexts across a large, uncoordinated suite.
-
-**3.** Shared cached-context singleton state mutation by an earlier test — only manifests when tests run together sharing the cache.
-
----
-
 # Part 25: Production/Debugging Capstone — Synthesizing Everything
 
 ## Capstone Incident 1: The Friday-afternoon checkout outage
@@ -1291,3 +1057,561 @@ As an interview framework: running a candidate explanation through this six-item
 ---
 
 *End of course — 25 parts covering IoC/DI, the container, configuration styles, dependency injection mechanics, autowiring, scopes, lifecycle, post-processors, circular dependencies, component scanning, Java config, environment/profiles, SpEL, resources, events, AOP (concepts, implementation, and internals/pitfalls), type conversion, validation, task execution/scheduling, FactoryBean, context hierarchies, testing, and a synthesizing capstone.*
+
+
+---
+
+
+
+### Practice Exercises & Answers
+
+
+---
+
+
+---
+
+## Practice Questions & Answers
+
+<details class="qa-item">
+<summary>1. IoC vs DI, without "container"?</summary>
+
+IoC is the general principle that control over object creation/flow is handed to an external mechanism. DI is the specific technique of supplying dependencies from outside rather than self-construction.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Rewrite `ReportGenerator` with constructor injection:</summary>
+
+```java
+interface Exporter { void export(Report r); }
+class PdfExporter implements Exporter { public void export(Report r) { } }
+class ReportGenerator {
+    private final Exporter exporter;
+    ReportGenerator(Exporter exporter) { this.exporter = exporter; }
+}
+```
+Benefit: tests can pass a `FakeExporter` instead of a real one.
+
+</details>
+
+<details class="qa-item">
+<summary>3. True/false: every bean must be `@Component`?</summary>
+
+False. `BeanDefinition` is the common thread; `@Bean` methods, XML, and programmatic registration all work too.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Why is fail-fast a feature?</summary>
+
+Surfaces broken config deterministically at startup/deploy rather than unpredictably in production traffic.
+
+</details>
+
+<details class="qa-item">
+<summary>2. "I'll use BeanFactory directly, it's lighter"</summary>
+
+Loses automatic post-processor registration, meaning `@Autowired`/`@Transactional`/AOP would need manual wiring; the "savings" aren't worth it.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Another null-`@Autowired` case</summary>
+
+Objects created via plain `new` inside a `@Bean` method body, or deserialized from JSON/a queue payload — neither goes through the container.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `RestTemplate`</summary>
+
+`@Bean`, since you don't own its source.
+
+</details>
+
+<details class="qa-item">
+<summary>2. CGLIB proxying of `@Configuration` prevents a `@Bean` method called from another `@Bean` method within the class from creating a second, duplicate instance</summary>
+
+it redirects the call to fetch the existing singleton.
+
+</details>
+
+<details class="qa-item">
+<summary>3. With `proxyBeanMethods = false`, declare dependencies as method parameters rather than calling other `@Bean` methods directly.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Three reasons for constructor injection: immutability, guaranteed non-null state, testability without a container (plus circular-dependency fail-fast and visible design smells).</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. Setter injection is right when a dependency is genuinely optional.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. ```java</summary>
+
+@Service
+@RequiredArgsConstructor
+public class InvoiceService {
+    private final TaxCalculator taxCalculator;
+    private final PdfGenerator pdfGenerator;
+}
+```
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Forcing explicit disambiguation everywhere: use `@Qualifier` on every site, avoid `@Primary` (which creates a silent default).</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. `@Autowired`+`@Qualifier` resolves by type first; `@Resource` resolves by name first.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. ```java</summary>
+
+@Service
+public class NotificationDispatcher {
+    private final Map<String, NotificationChannel> channels;
+    public NotificationDispatcher(Map<String, NotificationChannel> channels) { this.channels = channels; }
+    void notifyVia(String channelName, String msg) { channels.get(channelName).send(msg); }
+}
+```
+Use case: dispatch by a user's stored channel preference without an if/else chain.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Field-injecting a prototype into a singleton resolves once at construction. Fixes: `ObjectProvider` or scoped proxy.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. "Singleton means thread-safe" is wrong</summary>
+
+one shared instance actually increases the need for thread-safety discipline.
+
+</details>
+
+<details class="qa-item">
+<summary>3. The container hands off prototype instances and loses track of them</summary>
+
+no way to know when it's safe to destroy.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Order: constructor → setter injection → `postProcessBeforeInitialization` → `@PostConstruct` → `postProcessAfterInitialization`.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. `@PostConstruct` runs after `Aware` callbacks and any setter/field injection, and keeps initialization separately testable from field assignment.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. `SIGKILL` before graceful shutdown/`@PreDestroy` completes. Fix: enable graceful shutdown and a sufficient grace period.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `BeanFactoryPostProcessor` touches definitions/metadata pre-instantiation; `BeanPostProcessor` touches instances during lifecycle.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. `AnnotationAwareAspectJAutoProxyCreator`; runs in `postProcessAfterInitialization` so it wraps the fully-initialized bean.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. CGLIB can't subclass a `final` class</summary>
+
+proxying is silently skipped or the method isn't overridden.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Field injection can hand out a raw, shared-identity instance early; constructor injection has no partially-built object to hand out.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. Most to least preferable: extract shared collaborator > `@Lazy` > field/setter injection.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. A conditional/profile-gated bean differs between environments, so the cycle only manifests where both sides are actually active.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `@Service` = `@Component`, no functional difference. `@Repository` does differ (exception translation).</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. A sibling package isn't scanned by default. Fixes: widen `basePackages`, or move the app class to the common parent package.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. `useDefaultFilters = false` disables auto-detection of stereotypes entirely; useful for plugin-style architectures with a custom marker annotation.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `@EnableAsync` uses `@Import` internally to pull in the config registering the `@Async`-detecting `BeanPostProcessor`.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. `@ConditionalOnBean` requires a match to exist; `@ConditionalOnMissingBean` requires none to exist yet</summary>
+
+ordering determines which config class "wins" the race.
+
+</details>
+
+<details class="qa-item">
+<summary>3. A custom `Condition` via raw `@Conditional`, checking the environment variable directly.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Env var wins</summary>
+
+higher precedence, relaxed-bound to the same key.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Type-safe group binding + nested structure support (any two of the listed reasons).</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. It's still exposed via version control, artifacts, and introspection tooling like `/actuator/env`, regardless of whether it drives runtime behavior.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `${...}` is plain substitution; `#{...}` is full SpEL; nested, the placeholder resolves first, then the result is parsed as SpEL.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. `@PostAuthorize` needs `returnObject`</summary>
+
+only a full expression language can reference a value that only exists at evaluation time.
+
+</details>
+
+<details class="qa-item">
+<summary>3. RCE-class risk from unrestricted method/constructor invocation; use `SimpleEvaluationContext` or a constrained purpose-built syntax instead of raw SpEL.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. No valid filesystem path exists for a JAR zip entry; use `getInputStream()`.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. `classpath:` = first match only; `classpath*:` = all matches across every classpath root. Wrong choice silently drops contributions from some modules.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. `@PropertySource(value = "file:...", ignoreResourceNotFound = true)`.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Synchronous by default. Consequences: latency is additive; listener exceptions can break the publisher's operation.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. A plain listener fires before commit</summary>
+
+a rolled-back transaction still triggers the "confirmation," a real data inconsistency, not just performance.
+
+</details>
+
+<details class="qa-item">
+<summary>3. `@Transactional` tests roll back rather than commit, so the commit event the listener needs never occurs.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Join point = a point where advice could apply; pointcut = expression selecting which join points; advice = the code that runs at matches.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. CGLIB. Constraints: can't proxy `final` classes/methods; can never advise `private` methods.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. AspectJ weaves directly into bytecode, so `this` calls are advised too; Spring AOP's proxy is a separate external object that `this` calls never pass through.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `execution(public * com.acme.orders..*.*(..))`</summary>
+
+single dot excludes sub-packages.
+
+</details>
+
+<details class="qa-item">
+<summary>2. `@Around`; must call `pjp.proceed()`.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. `SecurityAspect` (lower `@Order`) runs first for `@Before` advice.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Direct dispatch on `this` never routes through the separate external proxy object; the proxy is only reached via DI-injected references from outside.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. Extraction > self-injection > `AopContext.currentProxy()` > full AspectJ, because extraction also fixes the likely underlying design issue.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. Nothing</summary>
+
+`@Transactional` on a `static` method is silently ignored, since AOP proxying only intercepts instance method dispatch.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `Converter` is plain, locale-agnostic, one-directional; `Formatter` is locale-aware and bidirectional</summary>
+
+needed for user-facing display/input.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Mass assignment: blind binding of any request field onto a target object. Mitigations: dedicated DTOs, explicit allowlisting.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. Generic type parameters unresolvable via reflection due to an intermediate generic abstract base class.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `@NotNull` rejects only null; `@NotEmpty` also rejects empty string; `@NotBlank` also rejects whitespace-only</summary>
+
+the right choice for required text.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Validation groups: `@Validated(Group.class)` + `groups = {...}` on constraints.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. Method validation is AOP-proxy-based (`MethodValidationPostProcessor`), so it inherits the same self-invocation bypass as `@Transactional`/`@Async`/`@Cacheable`.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. `SimpleAsyncTaskExecutor`</summary>
+
+unbounded thread-per-invocation, real OOM/exhaustion risk under load.
+
+</details>
+
+<details class="qa-item">
+<summary>2. `fixedRate` measures from start (can back up under slow execution); `fixedDelay` measures from end (self-paces).</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. All nine other jobs queue behind the hung one on the shared single thread. Fix: configure a multi-threaded `ThreadPoolTaskScheduler`.</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. You get the product (`Widget`), not the `FactoryBean` itself; use `&beanName` for the latter.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. Precise `getObjectType()` lets the container reason about type before instantiating, improving autowiring resolution and error clarity.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. `ObjectFactory`/`ObjectProvider` = consumer-side (lazy obtain); `FactoryBean` = producer-side (defines creation).</summary>
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Child sees parent; parent never sees child</summary>
+
+the parent has no structural awareness that children exist.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Multiple `DispatcherServlet`s sharing common business-layer beans without duplication, while keeping web layers independent.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. Each context manages its own post-processor registrations and lifecycle independently</summary>
+
+no automatic cross-context reach.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Exact match of config classes, profiles, properties, and especially `@MockBean`/`@SpyBean` set/customizers.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. Each distinct mock combination is its own cache key, silently multiplying rebuilt contexts across a large, uncoordinated suite.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>3. Shared cached-context singleton state mutation by an earlier test</summary>
+
+only manifests when tests run together sharing the cache.
+
+---
+
+</details>

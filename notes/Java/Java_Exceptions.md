@@ -3,6 +3,36 @@
 
 ---
 
+
+## Table of Contents
+
+1. [Part 1 — What Is a Java Exception, and Why Does Java Need Exceptions?](#part-1-what-is-a-java-exception-and-why-does-java-need-exceptions)
+2. [Part 2 — The Java Throwable Hierarchy](#part-2-the-java-throwable-hierarchy)
+3. [Part 3 — Checked vs. Unchecked Exceptions, In Depth](#part-3-checked-vs-unchecked-exceptions-in-depth)
+4. [Part 4 — The `throw` Statement, In Depth](#part-4-the-throw-statement-in-depth)
+5. [Part 5 — The `throws` Declaration, In Depth](#part-5-the-throws-declaration-in-depth)
+6. [Part 6 — Exception Propagation, In Depth](#part-6-exception-propagation-in-depth)
+7. [Part 7 — Stack Unwinding](#part-7-stack-unwinding)
+8. [Part 8 — `try` and `catch`, In Depth](#part-8-try-and-catch-in-depth)
+9. [Part 9 — `finally`, In Depth](#part-9-finally-in-depth)
+10. [Part 10 — Try-With-Resources](#part-10-try-with-resources)
+11. [Part 11 — Suppressed Exceptions](#part-11-suppressed-exceptions)
+12. [Part 12 — Exception Cause and Chaining](#part-12-exception-cause-and-chaining)
+13. [Part 13 — Custom Exceptions](#part-13-custom-exceptions)
+14. [Part 14 — Exception Naming and Design](#part-14-exception-naming-and-design)
+15. [Part 15 — Exception Handling Principles](#part-15-exception-handling-principles)
+16. [Part 16 — Exception Handling vs. Exception Throwing](#part-16-exception-handling-vs-exception-throwing)
+17. [Part 17 — Exception Behavior in Method Overriding](#part-17-exception-behavior-in-method-overriding)
+18. [Part 18 — Exceptions in Constructors](#part-18-exceptions-in-constructors)
+19. [Part 19 — Exceptions During Initialization](#part-19-exceptions-during-initialization)
+20. [Part 20 — Exception Performance](#part-20-exception-performance)
+21. [Part 21 — Error vs. Exception: Senior-Level Understanding](#part-21-error-vs-exception-senior-level-understanding)
+22. [Part 22 — Common Misconceptions](#part-22-common-misconceptions)
+23. [Part 23 — Realistic Java Exception Scenarios](#part-23-realistic-java-exception-scenarios)
+24. [Part 24 — Complete Concept Check](#part-24-complete-concept-check)
+
+---
+
 # Part 1 — What Is a Java Exception, and Why Does Java Need Exceptions?
 
 ### 1. The problem before exceptions existed

@@ -3,6 +3,55 @@
 
 ---
 
+## Table of Contents
+
+1. [Part 1 — String Fundamentals](#part-1-string-fundamentals)
+2. [Part 2 — String Immutability (Deep Dive)](#part-2-string-immutability-deep-dive)
+3. [Part 3 — String Internal Representation (Compact Strings)](#part-3-string-internal-representation-compact-strings)
+4. [Part 4 — The String Pool](#part-4-the-string-pool)
+5. [Part 5 — String Equality](#part-5-string-equality)
+6. [Part 6 — String Concatenation](#part-6-string-concatenation)
+7. [Part 7 — StringBuilder](#part-7-stringbuilder)
+8. [Part 8 — StringBuffer](#part-8-stringbuffer)
+9. [Part 9 — String Operations (Core Method Catalogue)](#part-9-string-operations-core-method-catalogue)
+10. [Part 10 — trim() vs strip()](#part-10-trim-vs-strip)
+11. [Part 11 — Unicode and the Character Model (Major Section)](#part-11-unicode-and-the-character-model-major-section)
+12. [Part 12 — Code Points and Unicode Processing (API Deep Dive)](#part-12-code-points-and-unicode-processing-api-deep-dive)
+13. [Part 13 — String Encoding and Charset](#part-13-string-encoding-and-charset)
+14. [Part 14 — Charset and I/O](#part-14-charset-and-io)
+15. [Part 15 — String Splitting and Joining](#part-15-string-splitting-and-joining)
+16. [Part 16 — StringJoiner](#part-16-stringjoiner)
+17. [Part 17 — String Formatting](#part-17-string-formatting)
+18. [Part 18 — String Templates / Modern Java Context](#part-18-string-templates-modern-java-context)
+19. [Part 19 — Regular Expressions](#part-19-regular-expressions)
+20. [Part 20 — String Replacement](#part-20-string-replacement)
+21. [Part 21 — String Searching Algorithms](#part-21-string-searching-algorithms)
+22. [Part 22 — String Comparison and Ordering](#part-22-string-comparison-and-ordering)
+23. [Part 23 — Locale and Internationalization](#part-23-locale-and-internationalization)
+24. [Part 24 — String Hashing](#part-24-string-hashing)
+25. [Part 25 — Strings as HashMap Keys (Production Perspective)](#part-25-strings-as-hashmap-keys-production-perspective)
+26. [Part 26 — String Normalization](#part-26-string-normalization)
+27. [Part 27 — Strings and Security](#part-27-strings-and-security)
+28. [Part 28 — Strings and Injection](#part-28-strings-and-injection)
+29. [Part 29 — Strings in JSON and REST APIs](#part-29-strings-in-json-and-rest-apis)
+30. [Part 30 — Strings and Logging](#part-30-strings-and-logging)
+31. [Part 31 — String Performance (Consolidated Analysis)](#part-31-string-performance-consolidated-analysis)
+32. [Part 32 — Large String Processing](#part-32-large-string-processing)
+33. [Part 33 — String vs StringBuilder vs StringBuffer vs CharSequence](#part-33-string-vs-stringbuilder-vs-stringbuffer-vs-charsequence)
+34. [Part 34 — Strings + Collections](#part-34-strings-collections)
+35. [Part 35 — Strings + Streams](#part-35-strings-streams)
+36. [Part 36 — Modern Java String APIs (Consolidated Reference)](#part-36-modern-java-string-apis-consolidated-reference)
+37. [Part 37 — Common Senior-Level Mistakes (Consolidated Catalogue)](#part-37-common-senior-level-mistakes-consolidated-catalogue)
+38. [Part 38 — Production Case Studies](#part-38-production-case-studies)
+39. [Part 39 — Simplified Internal Implementations](#part-39-simplified-internal-implementations)
+40. [Part 40 — Production Debugging](#part-40-production-debugging)
+
+---
+
+
+
+
+
 ## Part 1 — String Fundamentals
 
 `java.lang.String` is a `final` class implementing `CharSequence`, `Comparable<String>`, and `Serializable`. In Java 21, internally it holds:

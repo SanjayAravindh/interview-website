@@ -3,6 +3,51 @@
 
 ---
 
+## Table of Contents
+
+1. [Part 1 — Java Collections Framework Architecture](#part-1-java-collections-framework-architecture)
+2. [Java 21's addition: `SequencedCollection`, `SequencedSet`, `SequencedMap`](#java-21s-addition-sequencedcollection-sequencedset-sequencedmap)
+3. [Part 2 — ArrayList Deep Dive](#part-2-arraylist-deep-dive)
+4. [Part 3 — LinkedList Deep Dive](#part-3-linkedlist-deep-dive)
+5. [Java 21 relevance](#java-21-relevance)
+6. [Part 4 — HashSet Deep Dive](#part-4-hashset-deep-dive)
+7. [Part 5 — HashMap Deep Dive](#part-5-hashmap-deep-dive)
+8. [Part 6 — LinkedHashMap](#part-6-linkedhashmap)
+9. [Java 21 sequenced APIs on LinkedHashMap](#java-21-sequenced-apis-on-linkedhashmap)
+10. [Part 7 — TreeMap](#part-7-treemap)
+11. [Part 8 — Sets](#part-8-sets)
+12. [Java 21: `SequencedSet`, `reversed()`, first/last operations](#java-21-sequencedset-reversed-firstlast-operations)
+13. [Part 9 — Queue and Deque](#part-9-queue-and-deque)
+14. [Java 21 sequenced APIs](#java-21-sequenced-apis)
+15. [Part 10 — Stack](#part-10-stack)
+16. [Part 11 — PriorityQueue](#part-11-priorityqueue)
+17. [Part 12 — Immutable and Unmodifiable Collections](#part-12-immutable-and-unmodifiable-collections)
+18. [Part 13 — Concurrent Collections](#part-13-concurrent-collections)
+19. [Part 14 — CopyOnWrite Collections](#part-14-copyonwrite-collections)
+20. [Part 15 — BlockingQueue](#part-15-blockingqueue)
+21. [Part 16 — WeakHashMap and Reference-Based Collections](#part-16-weakhashmap-and-reference-based-collections)
+22. [Part 17 — EnumMap and EnumSet](#part-17-enummap-and-enumset)
+23. [Part 18 — Iterators](#part-18-iterators)
+24. [Part 19 — Spliterator and Streams](#part-19-spliterator-and-streams)
+25. [Part 20 — Generics + Collections](#part-20-generics-collections)
+26. [Part 21 — equals() and hashCode()](#part-21-equals-and-hashcode)
+27. [Part 22 — Complexity and Performance](#part-22-complexity-and-performance)
+28. [Part 23 — JVM and Memory Perspective](#part-23-jvm-and-memory-perspective)
+29. [Part 24 — Java 21 Collections and API Design](#part-24-java-21-collections-and-api-design)
+30. [Part 25 — Collections + Virtual Threads](#part-25-collections-virtual-threads)
+31. [Part 26 — Real Production Patterns](#part-26-real-production-patterns)
+32. [Part 27 — Common Senior-Level Mistakes](#part-27-common-senior-level-mistakes)
+33. [Part 28 — Collection Selection Framework](#part-28-collection-selection-framework)
+34. [Part 29 — Real-World Case Studies](#part-29-real-world-case-studies)
+35. [Part 30 — Simplified Internal Implementations](#part-30-simplified-internal-implementations)
+36. [Part 31 — Production Debugging](#part-31-production-debugging)
+
+---
+
+
+
+
+
 # Part 1 — Java Collections Framework Architecture
 
 Let's build the mental model first, because everything else in this course hangs off it.
@@ -1738,33 +1783,97 @@ Nearly every scenario traces back to a small handful of root mechanisms: the equ
 
 ---
 
-# Part 32 — Final Practice Phase
 
-Attempt each item before checking any answer key — answers aren't included in this document by design, since the course structure calls for attempting first. Work through these in order; each level builds on the internals and reasoning from Parts 1-31.
+---
 
-## Level 1 — Conceptual Exercises
+## Practice Questions & Answers
 
-1. Why does `Map<K,V>` not extend `Collection<E>`? Name the two concrete method-signature conflicts that would arise if it did.
-2. Explain the difference between `SequencedCollection`, `SequencedSet`, and `SequencedMap` — which concrete classes implement each, and why doesn't `HashMap` implement `SequencedMap`?
-3. You need a `Set` with: no duplicates, sorted iteration, and O(log n) range queries. Which class, and what's the one thing you must get right about your `Comparator` to avoid silently losing entries?
-4. What's the precise difference between "unmodifiable" and "immutable"? Give a concrete code example where treating them as equivalent causes a bug.
-5. Name three Java 21 additions to the Collections Framework and, for each, name the specific pre-21 gap it closes.
+### Part 32 — Final Practice Phase — Level 1 — Conceptual Exercises
 
-## Level 2 — Implementation Exercises
+<details class="qa-item">
+<summary>1. Why does `Map<K,V>` not extend `Collection<E>`? Name the two concrete method-signature conflicts that would arise if it did.</summary>
 
-6. Walk through, step by step, what happens internally when `HashMap.put()` triggers a resize from capacity 16 to 32 — specifically explain the lo/hi bit-split mechanism and why it avoids recomputing full hashes.
-7. Trace `ArrayDeque.addFirst()` and `addLast()` on a deque of capacity 8 that currently has `head=6, tail=2` (i.e., already wrapped around) — show the resulting indices after one of each call.
-8. Explain exactly why `PriorityQueue.remove(Object)` is O(n) while `poll()` is O(log n), even though both conceptually "remove an element."
-9. Walk through `TreeMap.put()` inserting a new key that requires one left rotation to restore the red-black invariants — describe what pointer reassignments occur.
-10. Explain why `ConcurrentHashMap.get()` requires no locking at all, but `put()` sometimes does. What specific field modifier makes the lock-free read safe?
-11. Implement (on paper or in an artifact) a `removeEldestEntry()` override for a `LinkedHashMap`-based cache that evicts once size exceeds 500 — then explain why this exact pattern has no safe equivalent on `ConcurrentHashMap`.
+_Work through this on your own first — detailed answer not included in the source note._
 
-## Level 3 — Code Analysis
+</details>
 
-For each snippet: What happens? What is the output (if it compiles/runs)? Is it correct? What is the complexity? Is it thread-safe? What subtle issue exists?
+<details class="qa-item">
+<summary>2. Explain the difference between `SequencedCollection`, `SequencedSet`, and `SequencedMap`</summary>
 
-12. 
-```java
+which concrete classes implement each, and why doesn't `HashMap` implement `SequencedMap`?
+
+</details>
+
+<details class="qa-item">
+<summary>3. You need a `Set` with: no duplicates, sorted iteration, and O(log n) range queries. Which class, and what's the one thing you must get right about your `Comparator` to avoid silently losing entries?</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>4. What's the precise difference between "unmodifiable" and "immutable"? Give a concrete code example where treating them as equivalent causes a bug.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>5. Name three Java 21 additions to the Collections Framework and, for each, name the specific pre-21 gap it closes.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+### Part 32 — Final Practice Phase — Level 2 — Implementation Exercises
+
+<details class="qa-item">
+<summary>6. Walk through, step by step, what happens internally when `HashMap.put()` triggers a resize from capacity 16 to 32</summary>
+
+specifically explain the lo/hi bit-split mechanism and why it avoids recomputing full hashes.
+
+</details>
+
+<details class="qa-item">
+<summary>7. Trace `ArrayDeque.addFirst()` and `addLast()` on a deque of capacity 8 that currently has `head=6, tail=2` (i.e., already wrapped around)</summary>
+
+show the resulting indices after one of each call.
+
+</details>
+
+<details class="qa-item">
+<summary>8. Explain exactly why `PriorityQueue.remove(Object)` is O(n) while `poll()` is O(log n), even though both conceptually "remove an element."</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>9. Walk through `TreeMap.put()` inserting a new key that requires one left rotation to restore the red-black invariants</summary>
+
+describe what pointer reassignments occur.
+
+</details>
+
+<details class="qa-item">
+<summary>10. Explain why `ConcurrentHashMap.get()` requires no locking at all, but `put()` sometimes does. What specific field modifier makes the lock-free read safe?</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>11. Implement (on paper or in an artifact) a `removeEldestEntry()` override for a `LinkedHashMap`-based cache that evicts once size exceeds 500</summary>
+
+then explain why this exact pattern has no safe equivalent on `ConcurrentHashMap`.
+
+</details>
+
+### Part 32 — Final Practice Phase — Level 3 — Code Analysis
+
+<details class="qa-item">
+<summary>12. ```java</summary>
+
 Map<String, Integer> map = new HashMap<>();
 map.put("a", 1);
 for (String key : map.keySet()) {
@@ -1772,40 +1881,55 @@ for (String key : map.keySet()) {
 }
 ```
 
-13.
-```java
+</details>
+
+<details class="qa-item">
+<summary>13. ```java</summary>
+
 List<Integer> list = List.of(1, 2, 3);
 List<Integer> mutable = new ArrayList<>(list);
 mutable.add(4);
 System.out.println(list.size());
 ```
 
-14.
-```java
+</details>
+
+<details class="qa-item">
+<summary>14. ```java</summary>
+
 Set<int[]> set = new HashSet<>();
 set.add(new int[]{1, 2, 3});
 set.add(new int[]{1, 2, 3});
 System.out.println(set.size());
 ```
 
-15.
-```java
+</details>
+
+<details class="qa-item">
+<summary>15. ```java</summary>
+
 PriorityQueue<Integer> pq = new PriorityQueue<>(Comparator.reverseOrder());
 pq.addAll(List.of(5, 1, 4, 2, 3));
 List<Integer> result = new ArrayList<>(pq);
 System.out.println(result);
 ```
 
-16.
-```java
+</details>
+
+<details class="qa-item">
+<summary>16. ```java</summary>
+
 Map<String, List<Integer>> map = new HashMap<>();
 map.computeIfAbsent("key", k -> new ArrayList<>()).add(1);
 map.computeIfAbsent("key", k -> new ArrayList<>()).add(2);
 System.out.println(map.get("key"));
 ```
 
-17.
-```java
+</details>
+
+<details class="qa-item">
+<summary>17. ```java</summary>
+
 List<String> names = new ArrayList<>(List.of("a", "b", "c", "d"));
 Iterator<String> it = names.iterator();
 while (it.hasNext()) {
@@ -1814,19 +1938,50 @@ while (it.hasNext()) {
 }
 ```
 
-## Level 4 — Performance Exercises
+</details>
 
-Given each workload, select the collection and justify against at least two alternatives you're rejecting.
+### Part 32 — Final Practice Phase — Level 4 — Performance Exercises
 
-18. A service holds a 50-million-entry lookup table, built once at startup from a bulk load, then read millions of times per minute with no further writes.
-19. A leaderboard needs the current top 10 scores at all times, updated by thousands of score submissions per second from a single-threaded event-processing pipeline.
-20. A rarely-changing list of ~15 feature-flag listeners is iterated on every single request across a highly concurrent service.
-21. A batch job needs to deduplicate 200 million log lines by a derived key, single-threaded, memory being the primary constraint.
-22. A cache of parsed configuration objects needs to survive being read by 50,000 concurrent virtual threads, refreshed roughly once per minute.
+<details class="qa-item">
+<summary>18. A service holds a 50-million-entry lookup table, built once at startup from a bulk load, then read millions of times per minute with no further writes.</summary>
 
-## Level 5 — Concurrency Exercises
+_Work through this on your own first — detailed answer not included in the source note._
 
-23. Explain precisely why this is unsafe, and fix it using `ConcurrentHashMap`'s atomic operations:
+</details>
+
+<details class="qa-item">
+<summary>19. A leaderboard needs the current top 10 scores at all times, updated by thousands of score submissions per second from a single-threaded event-processing pipeline.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>20. A rarely-changing list of ~15 feature-flag listeners is iterated on every single request across a highly concurrent service.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>21. A batch job needs to deduplicate 200 million log lines by a derived key, single-threaded, memory being the primary constraint.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>22. A cache of parsed configuration objects needs to survive being read by 50,000 concurrent virtual threads, refreshed roughly once per minute.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+### Part 32 — Final Practice Phase — Level 5 — Concurrency Exercises
+
+<details class="qa-item">
+<summary>23. Explain precisely why this is unsafe, and fix it using `ConcurrentHashMap`'s atomic operations:</summary>
+
 ```java
 ConcurrentHashMap<String, Integer> counts = new ConcurrentHashMap<>();
 if (!counts.containsKey(key)) {
@@ -1834,39 +1989,132 @@ if (!counts.containsKey(key)) {
 }
 counts.put(key, counts.get(key) + 1);
 ```
-24. Under what specific circumstance does calling a mutating method on a `ConcurrentHashMap` from inside a `computeIfAbsent` lambda (on the *same* map) cause a problem? What's the fix?
-25. You're migrating a thread-per-request service from a fixed platform-thread pool (200 threads) to virtual threads. Name two categories of latent bugs in existing shared-collection code that are more likely to surface after this migration, and why.
-26. Explain the throughput difference you'd expect between `AtomicInteger` and `LongAdder` for a counter incremented by 500 threads simultaneously — and why `LongAdder`'s `.sum()` is comparatively more expensive than `AtomicInteger.get()`.
-27. Why does `CopyOnWriteArrayList`'s iterator never throw `ConcurrentModificationException`, structurally — not "because it's well-tested," but because of what specific mechanism?
 
-## Level 6 — Production Debugging Exercises
+</details>
 
-For each symptom, name the likely root cause and how you'd confirm it.
+<details class="qa-item">
+<summary>24. Under what specific circumstance does calling a mutating method on a `ConcurrentHashMap` from inside a `computeIfAbsent` lambda (on the *same* map) cause a problem? What's the fix?</summary>
 
-28. A `Set<CustomKey>` used for request deduplication starts admitting duplicate requests only after several days of uptime, never in fresh restarts or in tests.
-29. A service's heap usage climbs steadily and never drops, even after a full GC, and a heap histogram shows one `HashMap`'s internal table array is far larger than its live entry count would suggest.
-30. Threads occasionally block for hundreds of milliseconds on what a thread dump shows as a `synchronized` block wrapping a shared `HashMap`, under moderate concurrent load that wasn't a problem in staging.
-31. A `PriorityQueue`-backed task scheduler occasionally processes a lower-priority task before a higher-priority one that was added earlier in the same batch, despite `poll()` being used correctly every time it's called.
-32. A `WeakHashMap`-based "cache" has a near-zero hit rate in production despite the same keys being requested repeatedly within a short window.
+_Work through this on your own first — detailed answer not included in the source note._
 
-## Level 7 — Design Exercises
+</details>
 
-Design the collection strategy (with justification, per the Part 28 framework) for:
+<details class="qa-item">
+<summary>25. You're migrating a thread-per-request service from a fixed platform-thread pool (200 threads) to virtual threads. Name two categories of latent bugs in existing shared-collection code that are more likely to surface after this migration, and why.</summary>
 
-33. A rate limiter tracking request counts per API key over a sliding 60-second window, serving ~50,000 requests/sec across many concurrent virtual threads.
-34. An in-memory audit log that must expose read-only access to the last 10,000 entries in insertion order, safely to many concurrent readers, while a single writer appends continuously.
-35. A graph algorithm needing to repeatedly extract the minimum-distance unvisited node (Dijkstra's-style) from a set of ~1 million nodes, with occasional priority updates for nodes already in the structure.
+_Work through this on your own first — detailed answer not included in the source note._
 
-## Level 8 — Senior Interview Exercises
+</details>
 
-These are meant to be answered aloud or in writing as if in a live interview — walk through your full reasoning, not just the final answer.
+<details class="qa-item">
+<summary>26. Explain the throughput difference you'd expect between `AtomicInteger` and `LongAdder` for a counter incremented by 500 threads simultaneously</summary>
 
-36. "Walk me through what happens, step by step, when you call `put()` on a `HashMap` that's about to trigger a resize."
-37. "Why would you ever choose `ConcurrentSkipListMap` over `ConcurrentHashMap`? What are you giving up, and what are you gaining?"
-38. "A colleague says `ArrayList.add()` is O(1). Do you agree? Push back on the parts of that claim you'd want to refine."
-39. "Explain the `equals()`/`hashCode()` contract to me as if I'd never seen it, then show me what breaks if you violate the load-bearing direction of it."
-40. "We need a thread-safe, mostly-read collection with predictable iteration behavior and minimal write frequency. What do you choose, and what are you trading away?"
+and why `LongAdder`'s `.sum()` is comparatively more expensive than `AtomicInteger.get()`.
+
+</details>
+
+<details class="qa-item">
+<summary>27. Why does `CopyOnWriteArrayList`'s iterator never throw `ConcurrentModificationException`, structurally</summary>
+
+not "because it's well-tested," but because of what specific mechanism?
+
+</details>
+
+### Part 32 — Final Practice Phase — Level 6 — Production Debugging Exercises
+
+<details class="qa-item">
+<summary>28. A `Set<CustomKey>` used for request deduplication starts admitting duplicate requests only after several days of uptime, never in fresh restarts or in tests.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>29. A service's heap usage climbs steadily and never drops, even after a full GC, and a heap histogram shows one `HashMap`'s internal table array is far larger than its live entry count would suggest.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>30. Threads occasionally block for hundreds of milliseconds on what a thread dump shows as a `synchronized` block wrapping a shared `HashMap`, under moderate concurrent load that wasn't a problem in staging.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>31. A `PriorityQueue`-backed task scheduler occasionally processes a lower-priority task before a higher-priority one that was added earlier in the same batch, despite `poll()` being used correctly every time it's called.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>32. A `WeakHashMap`-based "cache" has a near-zero hit rate in production despite the same keys being requested repeatedly within a short window.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+### Part 32 — Final Practice Phase — Level 7 — Design Exercises
+
+<details class="qa-item">
+<summary>33. A rate limiter tracking request counts per API key over a sliding 60-second window, serving ~50,000 requests/sec across many concurrent virtual threads.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>34. An in-memory audit log that must expose read-only access to the last 10,000 entries in insertion order, safely to many concurrent readers, while a single writer appends continuously.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>35. A graph algorithm needing to repeatedly extract the minimum-distance unvisited node (Dijkstra's-style) from a set of ~1 million nodes, with occasional priority updates for nodes already in the structure.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+### Part 32 — Final Practice Phase — Level 8 — Senior Interview Exercises
+
+<details class="qa-item">
+<summary>36. "Walk me through what happens, step by step, when you call `put()` on a `HashMap` that's about to trigger a resize."</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>37. "Why would you ever choose `ConcurrentSkipListMap` over `ConcurrentHashMap`? What are you giving up, and what are you gaining?"</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>38. "A colleague says `ArrayList.add()` is O(1). Do you agree? Push back on the parts of that claim you'd want to refine."</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>39. "Explain the `equals()`/`hashCode()` contract to me as if I'd never seen it, then show me what breaks if you violate the load-bearing direction of it."</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>40. "We need a thread-safe, mostly-read collection with predictable iteration behavior and minimal write frequency. What do you choose, and what are you trading away?"</summary>
 
 ---
 
 *End of taught curriculum and practice phase. Part 33 (Final Comprehensive Evaluation) follows only after Level 1-8 exercises above have been attempted.*
+
+</details>

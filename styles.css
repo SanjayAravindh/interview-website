@@ -276,6 +276,64 @@ body {
   background: #f0ebe1;
 }
 
+.article details.qa-item {
+  margin: 0.75rem 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 252, 246, 0.95);
+  overflow: hidden;
+}
+
+.article details.qa-item + details.qa-item {
+  margin-top: 0.55rem;
+}
+
+.article details.qa-item summary {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 1rem;
+  font-weight: 500;
+  line-height: 1.45;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.article details.qa-item summary::-webkit-details-marker {
+  display: none;
+}
+
+.article details.qa-item summary::before {
+  content: "";
+  flex: 0 0 0.55rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  transform: rotate(-45deg);
+  transition: transform 0.15s ease;
+  margin-top: -0.1rem;
+}
+
+.article details.qa-item[open] summary::before {
+  transform: rotate(45deg);
+  margin-top: 0.15rem;
+}
+
+.article details.qa-item summary:hover {
+  background: var(--accent-soft);
+}
+
+.article details.qa-item .qa-answer {
+  padding: 0.25rem 1rem 1rem 1.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.article details.qa-item .qa-answer > :first-child {
+  margin-top: 0.65rem;
+}
+
 @media (max-width: 860px) {
   .app {
     grid-template-columns: 1fr;

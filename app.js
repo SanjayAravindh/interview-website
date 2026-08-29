@@ -119,7 +119,119 @@
       .replaceAll('"', "&quot;");
   }
 
-  function scrollToHeading(id) {
+  function renderQAHtml(qaItems) {
+    let html = "<hr><h2 id=\"practice-questions-answers\">Practice Questions & Answers</h2>";
+    for (const item of qaItems) {
+      const answerHtml = item.answerMd ? marked.parse(item.answerMd) : "";
+      html += `<details class="qa-item"><summary>${item.summary}</summary><div class="qa-answer">${answerHtml}</div></details>`;
+    }
+    return html;
+  }
+
+  function extractDetailsBlocks(md) {
+    const items = [];
+    const re = /<details class="qa-item">\s*<summary>([\s\S]*?)<\/summary>\s*([\s\S]*?)<\/details>/gi;
+    let body = md;
+    let match;
+    while ((match = re.exec(md)) !== null) {
+      items.push({ summary: match[1].trim(), answerMd: match[2].trim() });
+    }
+    body = body.replace(re, "");
+    body = body.replace(/\n## Practice Questions & Answers\s*/gi, "\n");
+    return { body: body.trim(), items };
+  }
+
+  function isTocHeading(text, docTitle) {
+    if (docTitle && text === docTitle) return false;
+    if (/^\d+\.\s/.test(text)) return true;
+    if (/^Part\s+\d+/i.test(text)) return true;
+    if (/^Concept\s+\d+/i.test(text)) return true;
+    if (/^JAVA\s+\d+/i.test(text)) return true;
+    if (/^(Quick|Most-Asked|Roadmap)/i.test(text)) return true;
+    return false;
+  }
+
+  function removeDuplicatePreamble(md) {
+    const lines = md.split("\n");
+    const firstTitleIdx = lines.findIndex((l) => /^#\s+/.test(l.replace(/\r$/, "")));
+    if (firstTitleIdx === -1) return md;
+
+    const titleLine = lines[firstTitleIdx].replace(/\r$/, "").trim();
+    let titleCount = 0;
+    const out = [];
+    let skipping = false;
+
+    for (const rawLine of lines) {
+      const line = rawLine.replace(/\r$/, "");
+      if (line.trim() === titleLine) {
+        titleCount++;
+        if (titleCount > 1) {
+          skipping = true;
+          continue;
+        }
+      }
+      if (skipping) {
+        if (line.trim() === "---") {
+          skipping = false;
+        }
+        continue;
+      }
+      out.push(line);
+    }
+
+    return out.join("\n");
+  }
+
+  function insertTableOfContents(md) {
+    if (/^##\s+Table of Contents\s*$/im.test(md)) return md;
+
+    const docTitle = md.match(/^#\s+(.+)/)?.[1]?.trim();
+    const headings = [];
+    for (const line of md.split("\n")) {
+      const m = line.match(/^(#{1,2})\s+(.+)$/);
+      if (!m) continue;
+      const text = m[2].trim();
+      if (/^table of contents$/i.test(text)) continue;
+      if (/^practice questions/i.test(text)) continue;
+      if (!isTocHeading(text, docTitle)) continue;
+      headings.push({ text });
+    }
+    if (headings.length < 2) return md;
+
+    const items = headings.map((h, idx) => {
+      return `${idx + 1}. [${h.text}](#${headingSlug(h.text)})`;
+    });
+    const tocBlock = `## Table of Contents\n\n${items.join("\n")}\n\n---\n`;
+    const firstHr = md.indexOf("\n---\n");
+    if (firstHr !== -1) {
+      return `${md.slice(0, firstHr + 5)}\n${tocBlock}\n${md.slice(firstHr + 5)}`;
+    }
+    const titleMatch = md.match(/^#\s+.+\n+/);
+    if (titleMatch) {
+      const pos = titleMatch[0].length;
+      return `${md.slice(0, pos)}\n---\n\n${tocBlock}\n${md.slice(pos)}`;
+    }
+    return `${tocBlock}\n${md}`;
+  }
+
+  function renderMarkdownWithQA(markdown) {
+    const { body, items } = extractDetailsBlocks(markdown);
+    const prepared = insertTableOfContents(body);
+    slugState.used = new Set();
+    let html = marked.parse(prepared);
+    if (items.length) {
+      html += renderQAHtml(items);
+    }
+    return html;
+  }
+
+  function highlightCode(root) {
+    if (!window.hljs) return;
+    root.querySelectorAll("pre code").forEach((block) => {
+      window.hljs.highlightElement(block);
+    });
+  }
+
     if (!id) return false;
     const el = document.getElementById(id);
     if (!el) return false;
@@ -144,13 +256,8 @@
         throw new Error(`Could not load ${note.file} (${response.status})`);
       }
       const markdown = await response.text();
-      slugState.used = new Set();
-      article.innerHTML = marked.parse(markdown);
-      if (window.hljs) {
-        article.querySelectorAll("pre code").forEach((block) => {
-          window.hljs.highlightElement(block);
-        });
-      }
+      article.innerHTML = renderMarkdownWithQA(markdown);
+      highlightCode(article);
       if (headingId) {
         scrollToHeading(headingId);
       } else {

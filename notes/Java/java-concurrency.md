@@ -2,6 +2,36 @@
 
 ---
 
+
+## Table of Contents
+
+1. [Part 1: Process vs Thread, Why Concurrency Exists, Concurrency vs Parallelism](#part-1-process-vs-thread-why-concurrency-exists-concurrency-vs-parallelism)
+2. [Part 2: Thread Creation & Lifecycle](#part-2-thread-creation-lifecycle)
+3. [Part 3: Java Memory Model (JMM) — Visibility, Reordering, Happens-Before](#part-3-java-memory-model-jmm-visibility-reordering-happens-before)
+4. [Part 4: `volatile` — What It Actually Guarantees (and Doesn't)](#part-4-volatile-what-it-actually-guarantees-and-doesnt)
+5. [Part 5: Race Conditions & Atomicity — Real Production Bug Walkthroughs](#part-5-race-conditions-atomicity-real-production-bug-walkthroughs)
+6. [Part 6: `synchronized` — Intrinsic Locks, Monitors, Lock Escalation](#part-6-synchronized-intrinsic-locks-monitors-lock-escalation)
+7. [Part 7: `wait()` / `notify()` / `notifyAll()` — Classic Producer-Consumer](#part-7-wait-notify-notifyall-classic-producer-consumer)
+8. [Part 8: Deadlock, Livelock, Starvation](#part-8-deadlock-livelock-starvation)
+9. [Part 9: Thread-Safety Design — Immutability, Thread Confinement, Stateless Design](#part-9-thread-safety-design-immutability-thread-confinement-stateless-design)
+10. [Part 10: `ReentrantLock` vs `synchronized`](#part-10-reentrantlock-vs-synchronized)
+11. [Part 11: `ReadWriteLock` and `StampedLock`](#part-11-readwritelock-and-stampedlock)
+12. [Part 12: `Condition` Objects](#part-12-condition-objects)
+13. [Part 13: Executor Framework — `ExecutorService`, `ThreadPoolExecutor` Internals](#part-13-executor-framework-executorservice-threadpoolexecutor-internals)
+14. [Part 14: Thread Pool Sizing for Production](#part-14-thread-pool-sizing-for-production)
+15. [Part 15: `Callable`, `Future`, Cancellation & Interruption](#part-15-callable-future-cancellation-interruption)
+16. [Part 16: `CompletableFuture` — Composition, Async Pipelines, Exception Handling](#part-16-completablefuture-composition-async-pipelines-exception-handling)
+17. [Part 17: `ConcurrentHashMap` Internals](#part-17-concurrenthashmap-internals)
+18. [Part 18: `CopyOnWriteArrayList`, `BlockingQueue` Family](#part-18-copyonwritearraylist-blockingqueue-family)
+19. [Part 19: Atomic Classes & CAS (Compare-And-Swap)](#part-19-atomic-classes-cas-compare-and-swap)
+20. [Part 20: `CountDownLatch`, `CyclicBarrier`, `Semaphore`, `Phaser`](#part-20-countdownlatch-cyclicbarrier-semaphore-phaser)
+21. [Part 21: `ThreadLocal` — Use Cases, Memory Leak Pitfalls in Thread Pools](#part-21-threadlocal-use-cases-memory-leak-pitfalls-in-thread-pools)
+22. [Part 22: Fork/Join Framework & Parallel Streams](#part-22-forkjoin-framework-parallel-streams)
+23. [Part 23: Virtual Threads (Project Loom, Java 21) vs Platform Threads](#part-23-virtual-threads-project-loom-java-21-vs-platform-threads)
+24. [Part 24: Production Debugging — Thread Dumps, Deadlock Detection, Monitoring](#part-24-production-debugging-thread-dumps-deadlock-detection-monitoring)
+
+---
+
 ## Part 1: Process vs Thread, Why Concurrency Exists, Concurrency vs Parallelism
 
 ### What is a Process vs a Thread?
@@ -73,22 +103,6 @@ Interviewers use "concurrency vs parallelism" as a filter question. A senior als
 ### Real production scenario
 
 A payment service had a background thread pool processing webhook callbacks. On staging (2-core VM) it worked fine. In production (16-core VM), the same code started throwing intermittent `ConcurrentModificationException` on a shared `ArrayList` being read/written by different threads. The bug existed on staging too — it just never got triggered because fewer cores rarely produced the exact interleaving needed to expose the race. Lesson: **concurrency bugs are timing-dependent, not core-count-dependent**.
-
-### Practice exercises with answers
-
-**1. Write a program with two threads incrementing a shared non-volatile, non-atomic `int` counter 100,000 times each. Run it 5 times and observe the final value. Explain why it's rarely 200,000.**
-
-The increments interleave: both threads can read the same value, increment locally, and write back, silently losing updates. This is a lost-update race condition, formalized fully in Parts 3-5.
-
-**2. If you have an 8-core machine and a program with only 1 thread, is it concurrent? Is it parallel?**
-
-Neither — a single thread has nothing to interleave or parallelize with. Concurrency and parallelism both require at least two threads/tasks contending for execution.
-
-**3. What's the difference in behavior between calling `thread.start()` twice on the same `Thread` object vs calling `thread.run()` twice?**
-
-Calling `start()` twice throws `IllegalThreadStateException` — a `Thread` object is single-use. Calling `run()` twice just executes the method body twice, synchronously, on the calling thread — no new thread is ever created either time.
-
----
 
 ## Part 2: Thread Creation & Lifecycle
 
@@ -164,44 +178,6 @@ An order-processing service had response times randomly spike to 30+ seconds. A 
 
 Not naming threads (`new Thread(task, "payment-webhook-worker")`) makes thread dumps show meaningless `Thread-47` names during incidents.
 
-### Practice exercises with answers
-
-**1. Write code that puts a thread into `BLOCKED` state on purpose.**
-
-```java
-public class BlockedDemo {
-    static final Object lock = new Object();
-    public static void main(String[] args) throws InterruptedException {
-        Thread t1 = new Thread(() -> {
-            synchronized (lock) {
-                try { Thread.sleep(3000); } catch (InterruptedException e) {}
-            }
-        }, "Holder");
-        Thread t2 = new Thread(() -> {
-            synchronized (lock) { System.out.println("t2 got the lock"); }
-        }, "Waiter");
-        t1.start();
-        Thread.sleep(200);
-        t2.start();
-        Thread.sleep(200);
-        System.out.println("t1 state: " + t1.getState()); // TIMED_WAITING
-        System.out.println("t2 state: " + t2.getState()); // BLOCKED
-        t1.join(); t2.join();
-    }
-}
-```
-`t1` holds the lock while sleeping (`TIMED_WAITING`, not `BLOCKED`); `t2` can't enter the synchronized block so it's `BLOCKED`.
-
-**2. What state is a thread in while it's inside `t.join()` — the caller or the target?**
-
-The **caller's** state changes to `WAITING`/`TIMED_WAITING`. The target thread `t` keeps running unaffected.
-
-**3. Diagnosing a deadlock via `jstack`.**
-
-Use `jps` to find the PID, then `jstack <pid> > dump.txt`. Modern JVMs print "Found one Java-level deadlock" explicitly at the bottom. Manually: find `BLOCKED` threads, note what each is `waiting to lock` vs what it has `locked`, and look for a cycle. Taking 2-3 dumps a few seconds apart and seeing the same threads stuck confirms it.
-
----
-
 ## Part 3: Java Memory Model (JMM) — Visibility, Reordering, Happens-Before
 
 ### What is it?
@@ -267,22 +243,6 @@ By the volatile rule + transitivity, Thread 2 is guaranteed to see `a == 42` if 
 
 A `boolean running = true;` controlling a polling loop, set to `false` by a shutdown hook from another thread, never had `volatile`. Under JIT-optimized hot-loop conditions, the read got hoisted out of the loop and the thread never noticed the shutdown, leaking a thread on every deploy. Fix: mark the field `volatile`.
 
-### Practice exercises with answers
-
-**1. Why might a non-volatile stop-flag work in a quick test but fail after millions of iterations in production?**
-
-Under quick tests the JIT hasn't optimized the loop yet — reads happen to hit memory. Under sustained load, the JIT recognizes the loop as hot and can legally hoist the read out entirely since nothing in-thread modifies the field, effectively turning `while(running)` into `while(true)`.
-
-**2. Does `volatile` make `count++` thread-safe?**
-
-No — `count++` is read-modify-write (3 steps). `volatile` makes each individual read/write visible but doesn't stop two threads interleaving between them, causing lost updates.
-
-**3. Why is data written before `thread.start()` always visible inside `run()` without `volatile`?**
-
-The JMM's thread start rule: `Thread.start()` happens-before any action in the started thread, so all prior writes are guaranteed visible — a free happens-before edge specifically for thread creation.
-
----
-
 ## Part 4: `volatile` — What It Actually Guarantees (and Doesn't)
 
 ### What is it?
@@ -341,22 +301,6 @@ Checklist: single variable? Write-once-read-many, or single-writer-multi-reader,
 
 A rate limiter used `volatile long requestCount` incremented via `requestCount++`. Under a traffic spike, lost updates let more requests through than the configured limit. Fix: `AtomicLong.incrementAndGet()`.
 
-### Practice exercises with answers
-
-**1. 10 threads × 100,000 increments on `volatile int count` — final value?**
-
-Expect something short of 1,000,000 (e.g. 850,000-990,000) due to lost updates. Switching to `AtomicInteger.incrementAndGet()` produces exactly 1,000,000 every run, since the increment is one indivisible CAS operation.
-
-**2. Is a `volatile Config` reference, swapped wholesale, thread-safe? Why does bundling work?**
-
-Yes. `Config` is immutable (no half-updated states possible), and the reference swap is a single atomic pointer change with happens-before guarantees. Two separate `volatile` primitives can't guarantee this — a reader could see old-min + new-max, a combination that never truly existed.
-
-**3. Does `volatile` cause `BLOCKED` state? What happens on simultaneous writes?**
-
-No blocking at all with `volatile`. On simultaneous writes, whichever memory barrier completes last wins; the other write is simply overwritten, not queued or merged — no atomicity for compound ops results from this.
-
----
-
 ## Part 5: Race Conditions & Atomicity — Real Production Bug Walkthroughs
 
 ### What is it?
@@ -406,37 +350,6 @@ Scan for the check-then-act *shape*, not just shared mutable state. Any "read, d
 
 A coupon-redemption service using `ConcurrentHashMap` with `get()`-check-`put()` logic allowed 140+ redemptions on a "first 100" coupon, because the get-check-put sequence wasn't atomic even though the map itself was thread-safe. Fix: `merge()`/`compute()`-based atomic update.
 
-### Practice exercises with answers
-
-**1. Is `list.size()` then `list.get(list.size()-1)` on `CopyOnWriteArrayList` race-free?**
-
-No — two separate atomic calls; another thread can remove the last element in between, causing `IndexOutOfBoundsException`.
-
-**2. Race-free lazy singleton, and why double-checked locking is used.**
-
-```java
-class Singleton {
-    private static volatile Singleton instance;
-    public static Singleton getInstance() {
-        if (instance == null) {
-            synchronized (Singleton.class) {
-                if (instance == null) {
-                    instance = new Singleton();
-                }
-            }
-        }
-        return instance;
-    }
-}
-```
-Plain `synchronized` forces locking on every call forever. Double-checked locking makes the common case (already initialized) lock-free. `volatile` is mandatory to prevent readers seeing a partially-constructed object.
-
-**3. Is a `HashMap` read by many threads, written rarely by one, safe?**
-
-No — rare writes don't reduce risk to zero; concurrent resize can corrupt structure or even infinite-loop. Always use `ConcurrentHashMap`.
-
----
-
 ## Part 6: `synchronized` — Intrinsic Locks, Monitors, Lock Escalation
 
 ### What is it?
@@ -473,22 +386,6 @@ Default to `synchronized` for simple mutual exclusion; reach for `ReentrantLock`
 ### Real production scenario
 
 A cache's lock object was reassigned during a "reload" (`this.lockObject = new Object();`), so some threads locked the old object while others locked the new one — two separate locks protecting one shared map, causing corruption. Fix: `private final` lock object, never reassigned.
-
-### Practice exercises with answers
-
-**1. Do `synchronized` methods on two different objects block each other?**
-
-No — each object has its own monitor.
-
-**2. Why is `synchronized` reentrant, and what would break otherwise?**
-
-JVM tracks a per-thread hold count. Without reentrancy, a `synchronized` method calling another `synchronized` method on the same object would self-deadlock on every call.
-
-**3. Is the lock released if an exception is thrown mid-`synchronized` block? Contrast with `ReentrantLock`.**
-
-Yes, automatically — compiler/JVM guarantee. `ReentrantLock` has no such safety net; forgetting `finally` around `unlock()` leaves the lock permanently held.
-
----
 
 ## Part 7: `wait()` / `notify()` / `notifyAll()` — Classic Producer-Consumer
 
@@ -553,22 +450,6 @@ Rarely hand-written in modern production code (`BlockingQueue`/`Condition` wrap 
 
 A job scheduler used `notify()` (not `notifyAll()`) on a shared lock also used by health-check threads. `notify()` occasionally woke the wrong kind of waiter, stalling jobs. Fix: `notify()` → `notifyAll()`.
 
-### Practice exercises with answers
-
-**1. What exception is thrown calling `wait()` without the monitor, and why?**
-
-`IllegalMonitorStateException`. Required so the condition-check and wait-registration happen atomically, preventing a missed-signal race.
-
-**2. Rewrite with `if` instead of `while`, describe a breaking interleaving.**
-
-With capacity 1: two producers both see "full" (via `if`), one waits, other waits too. Consumer removes one item, `notifyAll()` wakes both. First proceeds to `add()` without re-checking (fine). Second, woken by the same `notifyAll()`, also proceeds without re-checking — pushes size to 2, violating capacity. `while` would have caught this.
-
-**3. Why must `wait`/`notify` happen on the same object as the held lock?**
-
-`wait()`/`notify()` require holding the monitor of the object they're called on, so the atomic release-and-register step and the eventual notify are guaranteed to coordinate on the exact same condition/lock pairing — mixing locks would reopen the missed-signal race.
-
----
-
 ## Part 8: Deadlock, Livelock, Starvation
 
 ### What is it?
@@ -601,33 +482,6 @@ Reduce the *number* of locks needed (immutability, confinement) before trying to
 
 A funds-transfer `transfer(from, to, amount)` locked `from` then `to` — opposite-direction concurrent transfers deadlocked reliably. Fix: lock by a consistent order (e.g., lower account ID first).
 
-### Practice exercises with answers
-
-**1. Fixed funds-transfer via consistent lock ordering.**
-
-```java
-public void transfer(Account from, Account to, double amount) {
-    Account first = from.getId() < to.getId() ? from : to;
-    Account second = from.getId() < to.getId() ? to : from;
-    synchronized (first) {
-        synchronized (second) {
-            from.debit(amount);
-            to.credit(amount);
-        }
-    }
-}
-```
-
-**2. Which of the four conditions does lock ordering break? Name a different strategy for a different condition.**
-
-Breaks **circular wait**. A different strategy — `tryLock()` with timeout, releasing and retrying on failure — breaks **hold and wait** instead.
-
-**3. Is livelock detectable the same way as deadlock via thread dump?**
-
-No — livelocked threads show `RUNNABLE`, not `BLOCKED`. Look at CPU usage vs actual throughput progress over time, or repeating identical stack traces across multiple dumps.
-
----
-
 ## Part 9: Thread-Safety Design — Immutability, Thread Confinement, Stateless Design
 
 ### What is it?
@@ -658,34 +512,6 @@ Immutable objects are inherently thread-safe with zero synchronization.
 ### Real production scenario
 
 A Spring `@Service` bean cached a `SimpleDateFormat` instance field (not thread-safe internally). Concurrent requests parsing dates produced silently wrong dates. Fix: `java.time.DateTimeFormatter` (immutable) or `ThreadLocal`-confined `SimpleDateFormat`.
-
-### Practice exercises with answers
-
-**1. Is `final` always enough for thread-safety? Counter-example.**
-
-No:
-```java
-final List<String> names = new ArrayList<>();
-names.add("x");  // Thread A
-names.add("y");  // Thread B — ArrayList itself isn't thread-safe
-```
-`final` only stops reassignment, not internal mutation races.
-
-**2. `SimpleDateFormat` fix via `ThreadLocal`.**
-
-```java
-class DateService {
-    private static final ThreadLocal<SimpleDateFormat> FORMATTER =
-        ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd"));
-    public String format(Date date) { return FORMATTER.get().format(date); }
-}
-```
-
-**3. Is handing a locally-built `HashMap` to another thread via a queue safe?**
-
-Yes, as long as the producer never touches it again — confinement via ownership transfer; the queue's happens-before guarantee (Part 18) does the safety work.
-
----
 
 ## Part 10: `ReentrantLock` vs `synchronized`
 
@@ -733,30 +559,6 @@ Reach for `ReentrantLock` only when you need a specific capability `synchronized
 
 A job coordinator used `tryLock(2, SECONDS)` to fail fast with a 503 rather than pile up blocked threads during a partial outage — turning potential full outage into graceful degradation.
 
-### Practice exercises with answers
-
-**1. Best-effort `tryLock()` increment.**
-
-```java
-public boolean tryIncrement() {
-    if (lock.tryLock()) {
-        try { count++; return true; } finally { lock.unlock(); }
-    }
-    return false;
-}
-```
-Useful for optional work like metrics counters where blocking a real request thread isn't worth it.
-
-**2. Why is risky code before `try{}` dangerous?**
-
-If it throws before `try` is entered, the paired `finally`'s `unlock()` never runs — lock held forever.
-
-**3. Effect of removing random backoff in a high-contention retry loop?**
-
-Livelock + wasted CPU (all threads `RUNNABLE`, colliding repeatedly), possibly starvation for unlucky threads that keep losing races.
-
----
-
 ## Part 11: `ReadWriteLock` and `StampedLock`
 
 ### What is it?
@@ -794,22 +596,6 @@ if (!stampedLock.validate(stamp)) {
 
 A feature-flag service switched from `synchronized` to `ReentrantReadWriteLock` for a read-heavy, rarely-written config cache, eliminating unnecessary read-side serialization.
 
-### Practice exercises with answers
-
-**1. When does `ReadWriteLock` underperform plain `synchronized`?**
-
-Balanced or write-heavy ratios, or light contention — extra bookkeeping cost without the parallel-read benefit materializing.
-
-**2. Why is `StampedLock` optimistic read faster with no contention?**
-
-No CAS-based acquire/release, no thread registration — just a version-stamp read and compare, versus `ReadWriteLock`'s real lock-state bookkeeping even when uncontended.
-
-**3. Concrete scenario where non-reentrancy bites.**
-
-An `outerUpdate()` holding the write lock calls `innerUpdate()`, which also tries to acquire the same write lock — self-deadlock, since `StampedLock` doesn't recognize "the current holder already has this."
-
----
-
 ## Part 12: `Condition` Objects
 
 ### What is it?
@@ -832,27 +618,6 @@ Use `Condition` specifically when you need more than one distinct wait scenario 
 ### Real production scenario
 
 A connection pool split `connectionAvailable` (signaled on every return) from `allReturned` (signaled only when fully drained, for shutdown) — eliminating wasted wake-and-recheck cycles a single shared wait-set would cause.
-
-### Practice exercises with answers
-
-**1. Connection pool with two `Condition`s — skeleton.**
-
-```java
-private final Condition connectionAvailable = lock.newCondition();
-private final Condition allReturned = lock.newCondition();
-// borrow() awaits connectionAvailable; returnConnection() signals connectionAvailable
-// always, and signals allReturned only when borrowedCount reaches 0.
-```
-
-**2. What happens calling `await()` without the lock?**
-
-`IllegalMonitorStateException` — same reasoning as `wait()`: atomicity of release-and-register requires holding the lock first.
-
-**3. Can `Condition`s from two different `Lock`s coordinate?**
-
-No — a `Condition` is tied to the specific lock that created it; unrelated locks have no shared coordination mechanism.
-
----
 
 ## Part 13: Executor Framework — `ExecutorService`, `ThreadPoolExecutor` Internals
 
@@ -890,22 +655,6 @@ Construct `ThreadPoolExecutor` explicitly with a bounded queue and a deliberate 
 
 A notification service's `newFixedThreadPool(10)` with an unbounded queue absorbed a 50x traffic spike into an ever-growing queue until `OutOfMemoryError` crashed the service. Fix: explicit bounded `ArrayBlockingQueue` + `CallerRunsPolicy`.
 
-### Practice exercises with answers
-
-**1. Trace 8 tasks through `ThreadPoolExecutor(2, 5, 30, SECONDS, new ArrayBlockingQueue<>(3), AbortPolicy)`.**
-
-Tasks 1-2 get new threads (core). Tasks 3-5 queue (queue fills). Tasks 6-8 grow the pool to max (5). A 9th task would be rejected.
-
-**2. Why is `CallerRunsPolicy` natural backpressure, and its risk for a web server thread?**
-
-It throttles the submitter to the pool's actual processing rate. Risk: if the caller is a scarce request-handling thread, it becomes unavailable for other requests, potentially cascading into a front-facing outage.
-
-**3. Why is `newFixedThreadPool`'s `maximumPoolSize` irrelevant?**
-
-It's implemented with `core == max` and an effectively unbounded `LinkedBlockingQueue` — the queue absorbs everything before the pool would ever need to grow, and it can't grow past `max` anyway since `core == max`.
-
----
-
 ## Part 14: Thread Pool Sizing for Production
 
 ### What is it?
@@ -927,22 +676,6 @@ Measure the actual wait/compute ratio from real traffic — don't guess.
 ### Real production scenario
 
 A service sized its downstream-API-calling pool using a CPU-bound formula (`cores+1`) when it should have used the I/O-bound formula — thread dumps showed most threads `WAITING` on network I/O while idle cores went unused. Re-sizing to ~60 threads (I/O-bound formula) dramatically improved throughput with the same hardware.
-
-### Practice exercises with answers
-
-**1. 4 cores, 2ms compute / 18ms wait — pool size?**
-
-`4 × (1 + 9) = 40` threads.
-
-**2. Why is a shared pool for CPU-heavy and I/O-heavy tasks a design smell?**
-
-Neither workload gets correctly sized, and a burst of slow I/O tasks can starve fast CPU tasks queued behind them (or vice versa).
-
-**3. Symptom and metric when downstream latency doubles but pool isn't resized?**
-
-Queue depth (and end-to-end latency) climbs steadily with a flat submission rate — the textbook "pool now under-sized for current downstream latency" signature.
-
----
 
 ## Part 15: `Callable`, `Future`, Cancellation & Interruption
 
@@ -986,31 +719,6 @@ catch (InterruptedException e) {
 
 A report-generation service's DB-bound reports cancelled promptly, but a CPU-bound, non-interruption-aware report type ignored `cancel(true)` entirely, running to completion regardless. Fix: add explicit `isInterrupted()` checks in the loop.
 
-### Practice exercises with answers
-
-**1. Cooperative-cancellation `Callable` with periodic checks.**
-
-```java
-Callable<Long> partialSum = () -> {
-    long sum = 0;
-    for (int i = 0; i < 1_000_000_000; i++) {
-        if (i % 100_000 == 0 && Thread.currentThread().isInterrupted()) return sum;
-        sum += i;
-    }
-    return sum;
-};
-```
-
-**2. What does `future.get()` throw if already cancelled?**
-
-`CancellationException`, immediately, without blocking — distinct from `ExecutionException` (task threw) and `InterruptedException` (caller interrupted while waiting).
-
-**3. Why is an empty `catch (InterruptedException e) {}` a real bug?**
-
-It discards the interrupt signal entirely; `shutdownNow()` during a deploy would interrupt the thread, but a swallowed exception means the loop never notices and ignores the shutdown request, potentially leading to a hard `SIGKILL`.
-
----
-
 ## Part 16: `CompletableFuture` — Composition, Async Pipelines, Exception Handling
 
 ### What is it?
@@ -1040,28 +748,6 @@ Calling `.get()` mid-pipeline defeats the purpose — keep composing with `thenA
 
 An API gateway calling three independent downstream services sequentially (190ms total) was rewritten with parallel `CompletableFuture.supplyAsync()` calls combined via `allOf`, cutting latency to ~80ms (the slowest single call) — a 58% reduction with no backend changes.
 
-### Practice exercises with answers
-
-**1. Parallel gateway rewrite.**
-
-```java
-CompletableFuture<UserInfo> userFuture = CompletableFuture.supplyAsync(() -> fetchUserInfo(userId));
-CompletableFuture<Inventory> inventoryFuture = CompletableFuture.supplyAsync(() -> fetchInventory(itemId));
-CompletableFuture<Pricing> pricingFuture = CompletableFuture.supplyAsync(() -> fetchPricing(itemId));
-CompletableFuture<Response> assembled = CompletableFuture.allOf(userFuture, inventoryFuture, pricingFuture)
-    .thenApply(v -> new Response(userFuture.join(), inventoryFuture.join(), pricingFuture.join()));
-```
-
-**2. Which stages run if the second `thenApply` throws?**
-
-First runs normally, second throws (exceptional completion), third is skipped entirely, `.exceptionally` catches it and produces the fallback.
-
-**3. Why does mid-pipeline `.get()` defeat the purpose?**
-
-It blocks the calling thread between each async call, serializing work that could have run in parallel — functionally identical to synchronous sequential calls with extra dispatch overhead.
-
----
-
 ## Part 17: `ConcurrentHashMap` Internals
 
 ### What is it?
@@ -1090,22 +776,6 @@ Using `size()` in capacity-limiting logic reintroduces a check-then-act race —
 
 A session store's background cleanup thread iterated and removed expired entries via `entrySet()` while request threads concurrently mutated the map — worked correctly with zero external synchronization because of weakly-consistent iteration semantics, letting the team remove unnecessary defensive locking they'd added out of `HashMap`-era caution.
 
-### Practice exercises with answers
-
-**1. Does `computeIfAbsent` run `expensiveInit()` once or twice under a race?**
-
-Exactly once — bucket-level locking serializes the second caller until the first completes and the key is present.
-
-**2. Why is modifying the same map from inside `computeIfAbsent`'s lambda dangerous?**
-
-The lambda runs under an internal bucket lock; recursive map mutation risks blocking indefinitely or throwing, an unsupported use case per JDK documentation.
-
-**3. Contrast fail-fast (`HashMap`) vs weakly-consistent (`ConcurrentHashMap`) iteration.**
-
-`HashMap`'s iterator throws `ConcurrentModificationException` on structural modification during iteration. `ConcurrentHashMap`'s iterator never throws — it may or may not reflect concurrent inserts, and either outcome is correct under its weakly-consistent contract.
-
----
-
 ## Part 18: `CopyOnWriteArrayList`, `BlockingQueue` Family
 
 ### What is it?
@@ -1131,22 +801,6 @@ Task t = queue.take(); // blocks if empty
 ### Real production scenario
 
 An event-processing listener registry (read on every event, written rarely) switched from `synchronized` iteration to `CopyOnWriteArrayList`, eliminating read-side lock contention entirely.
-
-### Practice exercises with answers
-
-**1. Is `CopyOnWriteArrayList` good for a frequently-modified shopping cart?**
-
-No — write-heavy usage means constant full-array copies; a regular locked `ArrayList` fits better.
-
-**2. Why does `SynchronousQueue`'s zero capacity force `newCachedThreadPool()`'s unbounded thread creation?**
-
-No buffer exists to queue excess tasks in, so the only response to a burst is immediately creating a new thread, up to `Integer.MAX_VALUE`.
-
-**3. What happens with producers but no consumers on a bounded `ArrayBlockingQueue`?**
-
-Producers fill the queue to capacity, then subsequent `put()` calls block (`WAITING` inside `notFull.await()` internally) indefinitely — a diagnosable thread-dump signature of dead/stopped consumers.
-
----
 
 ## Part 19: Atomic Classes & CAS (Compare-And-Swap)
 
@@ -1177,31 +831,6 @@ No thread ever blocks — failed CAS just retries.
 
 An analytics service's single `AtomicLong` counter, hammered by 200 concurrent threads, showed measurable CAS-retry/cache-line-contention overhead. Switching to `LongAdder` eliminated the bottleneck since the total was read only rarely.
 
-### Practice exercises with answers
-
-**1. Lock-free "increment only if below limit."**
-
-```java
-public boolean tryIncrement() {
-    while (true) {
-        int current = count.get();
-        if (current >= LIMIT) return false;
-        if (count.compareAndSet(current, current + 1)) return true;
-    }
-}
-```
-A single `compareAndSet` can't express this because the check must be re-evaluated fresh on every retry attempt.
-
-**2. Explain the ABA problem in a lock-free stack.**
-
-Thread A reads head=X. B pops X, pops Y, pushes X back (X.next now points to Z, not Y). A's CAS sees head is still X and succeeds, setting head to A's stale `X.next` (Y) — but Y is no longer valid, corrupting the stack even though the CAS "succeeded."
-
-**3. When would `LongAdder` be worse than `AtomicLong`?**
-
-For a rarely-incremented, frequently-read value (e.g., an active-connections gauge) — `sum()`'s per-read cost of combining cells outweighs the write-side benefit `LongAdder` provides.
-
----
-
 ## Part 20: `CountDownLatch`, `CyclicBarrier`, `Semaphore`, `Phaser`
 
 ### What is it?
@@ -1230,20 +859,6 @@ semaphore.acquire(); try { useResource(); } finally { semaphore.release(); }
 
 A batch job used `CountDownLatch(10)` to wait for 10 parallel chunks to finish before aggregating, and a `Semaphore(8)` to cap concurrent DB connections during those same chunks — two distinct primitives for two distinct concerns.
 
-### Practice exercises with answers
-
-**1. Batch job using both together — see combined skeleton with `CountDownLatch` + `Semaphore` wrapping only the DB-access portion.**
-
-**2. Why can't `CountDownLatch` be reused?**
-
-No reset mechanism by design — once zero, stays zero forever; further `countDown()` calls are harmless no-ops. `CyclicBarrier` exists for the repeating case.
-
-**3. Symptom of a `Semaphore` permit leak (double-`acquire()` without matching `release()`)?**
-
-`availablePermits()` trends steadily downward, never recovering even in low-usage periods, eventually reaching 0 and blocking all future `acquire()` calls forever.
-
----
-
 ## Part 21: `ThreadLocal` — Use Cases, Memory Leak Pitfalls in Thread Pools
 
 ### What is it?
@@ -1269,20 +884,6 @@ finally { RequestContext.clear(); }  // CRITICAL
 ### Real production scenario
 
 A multi-tenant SaaS app's `ThreadLocal` tenant-ID leaked across requests when an exception path skipped the filter's cleanup, causing one tenant to briefly see another tenant's data — a severe security incident traced to missing `finally`-guaranteed `clear()`.
-
-### Practice exercises with answers
-
-**1. Guaranteed-cleanup filter pattern** — `set()` before `try`, `clear()` in `finally` wrapping the entire chain invocation.
-
-**2. Why doesn't `set(null)` solve the leak the way `remove()` does?**
-
-`set(null)` still leaves an entry in the map (just with a null value) — `remove()` fully deletes it, truly resetting state for the next task on that thread.
-
-**3. Is forgetting `remove()` still a bug in a genuinely single-threaded app?**
-
-Far less dangerous — no cross-task contamination risk since the thread is never reused for a different logical context — but still a minor memory-footprint concern if the stored object is large.
-
----
 
 ## Part 22: Fork/Join Framework & Parallel Streams
 
@@ -1318,20 +919,6 @@ Blocking I/O inside a parallel stream lambda ties up the shared common `ForkJoin
 
 A reporting service's HTTP-bound `.parallelStream()` work starved unrelated `CompletableFuture` tasks elsewhere in the app because both shared the small default common pool. Fix: dedicated, separately-sized `ForkJoinPool` for the I/O-bound work.
 
-### Practice exercises with answers
-
-**1. Dedicated pool fix — wrap the parallel stream call in `dedicatedPool.submit(...)`.**
-
-**2. Why is `parallelStream().forEach(x -> results.add(...))` on a plain `ArrayList` unsafe?**
-
-`ArrayList.add()` isn't thread-safe internally — concurrent calls can corrupt internal state, drop elements, or throw.
-
-**3. Would `.parallelStream()` help on 50 microsecond-scale elements?**
-
-No — fork/join coordination overhead exceeds the trivial amount of actual work; sequential wins here.
-
----
-
 ## Part 23: Virtual Threads (Project Loom, Java 21) vs Platform Threads
 
 ### What is it?
@@ -1362,22 +949,6 @@ Pooling virtual threads like platform threads — defeats the point; they're mea
 ### Real production scenario
 
 A service migrated from a `CompletableFuture` async pipeline to sequential blocking code on virtual threads, with comparable throughput and much simpler, more debuggable code — except a legacy `synchronized` cache-population block caused carrier-thread pinning until replaced with `ReentrantLock`.
-
-### Practice exercises with answers
-
-**1. Why does 500,000 tasks on `newFixedThreadPool(200)` vs `newVirtualThreadPerTaskExecutor()` behave very differently for I/O-bound work?**
-
-The fixed pool queues almost everything behind 200 threads; virtual threads all start essentially immediately since unmounting frees carriers during I/O waits, with no artificial concurrency ceiling.
-
-**2. What happens to the carrier thread when a virtual thread blocks inside `synchronized`?**
-
-It stays genuinely blocked/pinned — can't unmount — reintroducing the exact scalability ceiling virtual threads exist to remove, for however many virtual threads hit that code path concurrently.
-
-**3. Why is pooling virtual threads counterproductive?**
-
-Creation is already nearly free (no OS-level cost to amortize), so pooling adds bookkeeping overhead and reintroduces an artificial concurrency ceiling for no benefit.
-
----
 
 ## Part 24: Production Debugging — Thread Dumps, Deadlock Detection, Monitoring
 
@@ -1411,36 +982,866 @@ Always rule out **GC pauses** first — a long stop-the-world pause looks identi
 
 An on-call engineer correctly ruled out deadlock (varying stack traces across dumps) and GC (clean logs) before finding a steadily climbing executor queue depth — the actual cause was a downstream dependency's silently degraded latency, requiring pool re-sizing, not a code fix.
 
+
+---
+
+
+
+
 ### Practice exercises with answers
 
-**1. Is one dump showing `BLOCKED` threads enough to call it a deadlock?**
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Part 25: Realistic Production Scenarios (with Answers)
+
+
+---
+
+## Practice Questions & Answers
+
+<details class="qa-item">
+<summary>1. Write a program with two threads incrementing a shared non-volatile, non-atomic `int` counter 100,000 times each. Run it 5 times and observe the final value. Explain why it's rarely 200,000.</summary>
+
+The increments interleave: both threads can read the same value, increment locally, and write back, silently losing updates. This is a lost-update race condition, formalized fully in Parts 3-5.
+
+</details>
+
+<details class="qa-item">
+<summary>2. If you have an 8-core machine and a program with only 1 thread, is it concurrent? Is it parallel?</summary>
+
+Neither — a single thread has nothing to interleave or parallelize with. Concurrency and parallelism both require at least two threads/tasks contending for execution.
+
+</details>
+
+<details class="qa-item">
+<summary>3. What's the difference in behavior between calling `thread.start()` twice on the same `Thread` object vs calling `thread.run()` twice?</summary>
+
+Calling `start()` twice throws `IllegalThreadStateException` — a `Thread` object is single-use. Calling `run()` twice just executes the method body twice, synchronously, on the calling thread — no new thread is ever created either time.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Write code that puts a thread into `BLOCKED` state on purpose.</summary>
+
+```java
+public class BlockedDemo {
+    static final Object lock = new Object();
+    public static void main(String[] args) throws InterruptedException {
+        Thread t1 = new Thread(() -> {
+            synchronized (lock) {
+                try { Thread.sleep(3000); } catch (InterruptedException e) {}
+            }
+        }, "Holder");
+        Thread t2 = new Thread(() -> {
+            synchronized (lock) { System.out.println("t2 got the lock"); }
+        }, "Waiter");
+        t1.start();
+        Thread.sleep(200);
+        t2.start();
+        Thread.sleep(200);
+        System.out.println("t1 state: " + t1.getState()); // TIMED_WAITING
+        System.out.println("t2 state: " + t2.getState()); // BLOCKED
+        t1.join(); t2.join();
+    }
+}
+```
+`t1` holds the lock while sleeping (`TIMED_WAITING`, not `BLOCKED`); `t2` can't enter the synchronized block so it's `BLOCKED`.
+
+</details>
+
+<details class="qa-item">
+<summary>2. What state is a thread in while it's inside `t.join()` — the caller or the target?</summary>
+
+The **caller's** state changes to `WAITING`/`TIMED_WAITING`. The target thread `t` keeps running unaffected.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Diagnosing a deadlock via `jstack`.</summary>
+
+Use `jps` to find the PID, then `jstack <pid> > dump.txt`. Modern JVMs print "Found one Java-level deadlock" explicitly at the bottom. Manually: find `BLOCKED` threads, note what each is `waiting to lock` vs what it has `locked`, and look for a cycle. Taking 2-3 dumps a few seconds apart and seeing the same threads stuck confirms it.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Why might a non-volatile stop-flag work in a quick test but fail after millions of iterations in production?</summary>
+
+Under quick tests the JIT hasn't optimized the loop yet — reads happen to hit memory. Under sustained load, the JIT recognizes the loop as hot and can legally hoist the read out entirely since nothing in-thread modifies the field, effectively turning `while(running)` into `while(true)`.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Does `volatile` make `count++` thread-safe?</summary>
+
+No — `count++` is read-modify-write (3 steps). `volatile` makes each individual read/write visible but doesn't stop two threads interleaving between them, causing lost updates.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Why is data written before `thread.start()` always visible inside `run()` without `volatile`?</summary>
+
+The JMM's thread start rule: `Thread.start()` happens-before any action in the started thread, so all prior writes are guaranteed visible — a free happens-before edge specifically for thread creation.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. 10 threads × 100,000 increments on `volatile int count` — final value?</summary>
+
+Expect something short of 1,000,000 (e.g. 850,000-990,000) due to lost updates. Switching to `AtomicInteger.incrementAndGet()` produces exactly 1,000,000 every run, since the increment is one indivisible CAS operation.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Is a `volatile Config` reference, swapped wholesale, thread-safe? Why does bundling work?</summary>
+
+Yes. `Config` is immutable (no half-updated states possible), and the reference swap is a single atomic pointer change with happens-before guarantees. Two separate `volatile` primitives can't guarantee this — a reader could see old-min + new-max, a combination that never truly existed.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Does `volatile` cause `BLOCKED` state? What happens on simultaneous writes?</summary>
+
+No blocking at all with `volatile`. On simultaneous writes, whichever memory barrier completes last wins; the other write is simply overwritten, not queued or merged — no atomicity for compound ops results from this.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Is `list.size()` then `list.get(list.size()-1)` on `CopyOnWriteArrayList` race-free?</summary>
+
+No — two separate atomic calls; another thread can remove the last element in between, causing `IndexOutOfBoundsException`.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Race-free lazy singleton, and why double-checked locking is used.</summary>
+
+```java
+class Singleton {
+    private static volatile Singleton instance;
+    public static Singleton getInstance() {
+        if (instance == null) {
+            synchronized (Singleton.class) {
+                if (instance == null) {
+                    instance = new Singleton();
+                }
+            }
+        }
+        return instance;
+    }
+}
+```
+Plain `synchronized` forces locking on every call forever. Double-checked locking makes the common case (already initialized) lock-free. `volatile` is mandatory to prevent readers seeing a partially-constructed object.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Is a `HashMap` read by many threads, written rarely by one, safe?</summary>
+
+No — rare writes don't reduce risk to zero; concurrent resize can corrupt structure or even infinite-loop. Always use `ConcurrentHashMap`.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Do `synchronized` methods on two different objects block each other?</summary>
+
+No — each object has its own monitor.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why is `synchronized` reentrant, and what would break otherwise?</summary>
+
+JVM tracks a per-thread hold count. Without reentrancy, a `synchronized` method calling another `synchronized` method on the same object would self-deadlock on every call.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Is the lock released if an exception is thrown mid-`synchronized` block? Contrast with `ReentrantLock`.</summary>
+
+Yes, automatically — compiler/JVM guarantee. `ReentrantLock` has no such safety net; forgetting `finally` around `unlock()` leaves the lock permanently held.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. What exception is thrown calling `wait()` without the monitor, and why?</summary>
+
+`IllegalMonitorStateException`. Required so the condition-check and wait-registration happen atomically, preventing a missed-signal race.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Rewrite with `if` instead of `while`, describe a breaking interleaving.</summary>
+
+With capacity 1: two producers both see "full" (via `if`), one waits, other waits too. Consumer removes one item, `notifyAll()` wakes both. First proceeds to `add()` without re-checking (fine). Second, woken by the same `notifyAll()`, also proceeds without re-checking — pushes size to 2, violating capacity. `while` would have caught this.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Why must `wait`/`notify` happen on the same object as the held lock?</summary>
+
+`wait()`/`notify()` require holding the monitor of the object they're called on, so the atomic release-and-register step and the eventual notify are guaranteed to coordinate on the exact same condition/lock pairing — mixing locks would reopen the missed-signal race.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Fixed funds-transfer via consistent lock ordering.</summary>
+
+```java
+public void transfer(Account from, Account to, double amount) {
+    Account first = from.getId() < to.getId() ? from : to;
+    Account second = from.getId() < to.getId() ? to : from;
+    synchronized (first) {
+        synchronized (second) {
+            from.debit(amount);
+            to.credit(amount);
+        }
+    }
+}
+```
+
+</details>
+
+<details class="qa-item">
+<summary>2. Which of the four conditions does lock ordering break? Name a different strategy for a different condition.</summary>
+
+Breaks **circular wait**. A different strategy — `tryLock()` with timeout, releasing and retrying on failure — breaks **hold and wait** instead.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Is livelock detectable the same way as deadlock via thread dump?</summary>
+
+No — livelocked threads show `RUNNABLE`, not `BLOCKED`. Look at CPU usage vs actual throughput progress over time, or repeating identical stack traces across multiple dumps.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Is `final` always enough for thread-safety? Counter-example.</summary>
+
+No:
+```java
+final List<String> names = new ArrayList<>();
+names.add("x");  // Thread A
+names.add("y");  // Thread B — ArrayList itself isn't thread-safe
+```
+`final` only stops reassignment, not internal mutation races.
+
+</details>
+
+<details class="qa-item">
+<summary>2. `SimpleDateFormat` fix via `ThreadLocal`.</summary>
+
+```java
+class DateService {
+    private static final ThreadLocal<SimpleDateFormat> FORMATTER =
+        ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd"));
+    public String format(Date date) { return FORMATTER.get().format(date); }
+}
+```
+
+</details>
+
+<details class="qa-item">
+<summary>3. Is handing a locally-built `HashMap` to another thread via a queue safe?</summary>
+
+Yes, as long as the producer never touches it again — confinement via ownership transfer; the queue's happens-before guarantee (Part 18) does the safety work.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Best-effort `tryLock()` increment.</summary>
+
+```java
+public boolean tryIncrement() {
+    if (lock.tryLock()) {
+        try { count++; return true; } finally { lock.unlock(); }
+    }
+    return false;
+}
+```
+Useful for optional work like metrics counters where blocking a real request thread isn't worth it.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why is risky code before `try{}` dangerous?</summary>
+
+If it throws before `try` is entered, the paired `finally`'s `unlock()` never runs — lock held forever.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Effect of removing random backoff in a high-contention retry loop?</summary>
+
+Livelock + wasted CPU (all threads `RUNNABLE`, colliding repeatedly), possibly starvation for unlucky threads that keep losing races.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. When does `ReadWriteLock` underperform plain `synchronized`?</summary>
+
+Balanced or write-heavy ratios, or light contention — extra bookkeeping cost without the parallel-read benefit materializing.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why is `StampedLock` optimistic read faster with no contention?</summary>
+
+No CAS-based acquire/release, no thread registration — just a version-stamp read and compare, versus `ReadWriteLock`'s real lock-state bookkeeping even when uncontended.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Concrete scenario where non-reentrancy bites.</summary>
+
+An `outerUpdate()` holding the write lock calls `innerUpdate()`, which also tries to acquire the same write lock — self-deadlock, since `StampedLock` doesn't recognize "the current holder already has this."
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Connection pool with two `Condition`s — skeleton.</summary>
+
+```java
+private final Condition connectionAvailable = lock.newCondition();
+private final Condition allReturned = lock.newCondition();
+// borrow() awaits connectionAvailable; returnConnection() signals connectionAvailable
+// always, and signals allReturned only when borrowedCount reaches 0.
+```
+
+</details>
+
+<details class="qa-item">
+<summary>2. What happens calling `await()` without the lock?</summary>
+
+`IllegalMonitorStateException` — same reasoning as `wait()`: atomicity of release-and-register requires holding the lock first.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Can `Condition`s from two different `Lock`s coordinate?</summary>
+
+No — a `Condition` is tied to the specific lock that created it; unrelated locks have no shared coordination mechanism.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Trace 8 tasks through `ThreadPoolExecutor(2, 5, 30, SECONDS, new ArrayBlockingQueue<>(3), AbortPolicy)`.</summary>
+
+Tasks 1-2 get new threads (core). Tasks 3-5 queue (queue fills). Tasks 6-8 grow the pool to max (5). A 9th task would be rejected.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why is `CallerRunsPolicy` natural backpressure, and its risk for a web server thread?</summary>
+
+It throttles the submitter to the pool's actual processing rate. Risk: if the caller is a scarce request-handling thread, it becomes unavailable for other requests, potentially cascading into a front-facing outage.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Why is `newFixedThreadPool`'s `maximumPoolSize` irrelevant?</summary>
+
+It's implemented with `core == max` and an effectively unbounded `LinkedBlockingQueue` — the queue absorbs everything before the pool would ever need to grow, and it can't grow past `max` anyway since `core == max`.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. 4 cores, 2ms compute / 18ms wait — pool size?</summary>
+
+`4 × (1 + 9) = 40` threads.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why is a shared pool for CPU-heavy and I/O-heavy tasks a design smell?</summary>
+
+Neither workload gets correctly sized, and a burst of slow I/O tasks can starve fast CPU tasks queued behind them (or vice versa).
+
+</details>
+
+<details class="qa-item">
+<summary>3. Symptom and metric when downstream latency doubles but pool isn't resized?</summary>
+
+Queue depth (and end-to-end latency) climbs steadily with a flat submission rate — the textbook "pool now under-sized for current downstream latency" signature.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Cooperative-cancellation `Callable` with periodic checks.</summary>
+
+```java
+Callable<Long> partialSum = () -> {
+    long sum = 0;
+    for (int i = 0; i < 1_000_000_000; i++) {
+        if (i % 100_000 == 0 && Thread.currentThread().isInterrupted()) return sum;
+        sum += i;
+    }
+    return sum;
+};
+```
+
+</details>
+
+<details class="qa-item">
+<summary>2. What does `future.get()` throw if already cancelled?</summary>
+
+`CancellationException`, immediately, without blocking — distinct from `ExecutionException` (task threw) and `InterruptedException` (caller interrupted while waiting).
+
+</details>
+
+<details class="qa-item">
+<summary>3. Why is an empty `catch (InterruptedException e) {}` a real bug?</summary>
+
+It discards the interrupt signal entirely; `shutdownNow()` during a deploy would interrupt the thread, but a swallowed exception means the loop never notices and ignores the shutdown request, potentially leading to a hard `SIGKILL`.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Parallel gateway rewrite.</summary>
+
+```java
+CompletableFuture<UserInfo> userFuture = CompletableFuture.supplyAsync(() -> fetchUserInfo(userId));
+CompletableFuture<Inventory> inventoryFuture = CompletableFuture.supplyAsync(() -> fetchInventory(itemId));
+CompletableFuture<Pricing> pricingFuture = CompletableFuture.supplyAsync(() -> fetchPricing(itemId));
+CompletableFuture<Response> assembled = CompletableFuture.allOf(userFuture, inventoryFuture, pricingFuture)
+    .thenApply(v -> new Response(userFuture.join(), inventoryFuture.join(), pricingFuture.join()));
+```
+
+</details>
+
+<details class="qa-item">
+<summary>2. Which stages run if the second `thenApply` throws?</summary>
+
+First runs normally, second throws (exceptional completion), third is skipped entirely, `.exceptionally` catches it and produces the fallback.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Why does mid-pipeline `.get()` defeat the purpose?</summary>
+
+It blocks the calling thread between each async call, serializing work that could have run in parallel — functionally identical to synchronous sequential calls with extra dispatch overhead.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Does `computeIfAbsent` run `expensiveInit()` once or twice under a race?</summary>
+
+Exactly once — bucket-level locking serializes the second caller until the first completes and the key is present.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why is modifying the same map from inside `computeIfAbsent`'s lambda dangerous?</summary>
+
+The lambda runs under an internal bucket lock; recursive map mutation risks blocking indefinitely or throwing, an unsupported use case per JDK documentation.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Contrast fail-fast (`HashMap`) vs weakly-consistent (`ConcurrentHashMap`) iteration.</summary>
+
+`HashMap`'s iterator throws `ConcurrentModificationException` on structural modification during iteration. `ConcurrentHashMap`'s iterator never throws — it may or may not reflect concurrent inserts, and either outcome is correct under its weakly-consistent contract.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Is `CopyOnWriteArrayList` good for a frequently-modified shopping cart?</summary>
+
+No — write-heavy usage means constant full-array copies; a regular locked `ArrayList` fits better.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why does `SynchronousQueue`'s zero capacity force `newCachedThreadPool()`'s unbounded thread creation?</summary>
+
+No buffer exists to queue excess tasks in, so the only response to a burst is immediately creating a new thread, up to `Integer.MAX_VALUE`.
+
+</details>
+
+<details class="qa-item">
+<summary>3. What happens with producers but no consumers on a bounded `ArrayBlockingQueue`?</summary>
+
+Producers fill the queue to capacity, then subsequent `put()` calls block (`WAITING` inside `notFull.await()` internally) indefinitely — a diagnosable thread-dump signature of dead/stopped consumers.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Lock-free "increment only if below limit."</summary>
+
+```java
+public boolean tryIncrement() {
+    while (true) {
+        int current = count.get();
+        if (current >= LIMIT) return false;
+        if (count.compareAndSet(current, current + 1)) return true;
+    }
+}
+```
+A single `compareAndSet` can't express this because the check must be re-evaluated fresh on every retry attempt.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Explain the ABA problem in a lock-free stack.</summary>
+
+Thread A reads head=X. B pops X, pops Y, pushes X back (X.next now points to Z, not Y). A's CAS sees head is still X and succeeds, setting head to A's stale `X.next` (Y) — but Y is no longer valid, corrupting the stack even though the CAS "succeeded."
+
+</details>
+
+<details class="qa-item">
+<summary>3. When would `LongAdder` be worse than `AtomicLong`?</summary>
+
+For a rarely-incremented, frequently-read value (e.g., an active-connections gauge) — `sum()`'s per-read cost of combining cells outweighs the write-side benefit `LongAdder` provides.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Batch job using both together — see combined skeleton with `CountDownLatch` + `Semaphore` wrapping only the DB-access portion.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why can't `CountDownLatch` be reused?</summary>
+
+No reset mechanism by design — once zero, stays zero forever; further `countDown()` calls are harmless no-ops. `CyclicBarrier` exists for the repeating case.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Symptom of a `Semaphore` permit leak (double-`acquire()` without matching `release()`)?</summary>
+
+`availablePermits()` trends steadily downward, never recovering even in low-usage periods, eventually reaching 0 and blocking all future `acquire()` calls forever.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Guaranteed-cleanup filter pattern</summary>
+
+— `set()` before `try`, `clear()` in `finally` wrapping the entire chain invocation.
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why doesn't `set(null)` solve the leak the way `remove()` does?</summary>
+
+`set(null)` still leaves an entry in the map (just with a null value) — `remove()` fully deletes it, truly resetting state for the next task on that thread.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Is forgetting `remove()` still a bug in a genuinely single-threaded app?</summary>
+
+Far less dangerous — no cross-task contamination risk since the thread is never reused for a different logical context — but still a minor memory-footprint concern if the stored object is large.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Dedicated pool fix — wrap the parallel stream call in `dedicatedPool.submit(...)`.</summary>
+
+_Work through this on your own first — detailed answer not included in the source note._
+
+</details>
+
+<details class="qa-item">
+<summary>2. Why is `parallelStream().forEach(x -> results.add(...))` on a plain `ArrayList` unsafe?</summary>
+
+`ArrayList.add()` isn't thread-safe internally — concurrent calls can corrupt internal state, drop elements, or throw.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Would `.parallelStream()` help on 50 microsecond-scale elements?</summary>
+
+No — fork/join coordination overhead exceeds the trivial amount of actual work; sequential wins here.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Why does 500,000 tasks on `newFixedThreadPool(200)` vs `newVirtualThreadPerTaskExecutor()` behave very differently for I/O-bound work?</summary>
+
+The fixed pool queues almost everything behind 200 threads; virtual threads all start essentially immediately since unmounting frees carriers during I/O waits, with no artificial concurrency ceiling.
+
+</details>
+
+<details class="qa-item">
+<summary>2. What happens to the carrier thread when a virtual thread blocks inside `synchronized`?</summary>
+
+It stays genuinely blocked/pinned — can't unmount — reintroducing the exact scalability ceiling virtual threads exist to remove, for however many virtual threads hit that code path concurrently.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Why is pooling virtual threads counterproductive?</summary>
+
+Creation is already nearly free (no OS-level cost to amortize), so pooling adds bookkeeping overhead and reintroduces an artificial concurrency ceiling for no benefit.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>1. Is one dump showing `BLOCKED` threads enough to call it a deadlock?</summary>
 
 No — check for the JVM's explicit deadlock report, examine what the holding thread is doing, and take a second dump to see if anything has changed.
 
-**2. Why check GC logs early?**
+</details>
+
+<details class="qa-item">
+<summary>2. Why check GC logs early?</summary>
 
 A stop-the-world pause halts every thread and looks identical to a concurrency freeze from the outside; it's a cheap, fast check to rule out before deeper investigation.
 
-**3. Steadily declining `Semaphore.availablePermits()` — what to investigate?**
+</details>
+
+<details class="qa-item">
+<summary>3. Steadily declining `Semaphore.availablePermits()` — what to investigate?</summary>
 
 Audit every acquire/release call site for guaranteed `finally`-wrapped release, missing releases on early-return/exception paths, and any accidental double-`acquire()` in retry logic.
 
 ---
 
-## Part 25: Realistic Production Scenarios (with Answers)
+</details>
 
-**1. Silent Data Corruption** — Plain `HashMap` read/written concurrently (scheduled refresh vs request threads) caused sporadic `NullPointerException` under increased traffic. Fix: `volatile` reference to an immutable map, or `ConcurrentHashMap`.
+<details class="qa-item">
+<summary>1. Silent Data Corruption</summary>
 
-**2. The Vanishing Discount** — An `AtomicInteger`-based "first 500" promo counter was actually correct; the real bug was a swallowed exception in downstream `applyDiscount()` logic. Lesson: verify the atomic primitive is genuinely misused before blaming concurrency.
+— Plain `HashMap` read/written concurrently (scheduled refresh vs request threads) caused sporadic `NullPointerException` under increased traffic. Fix: `volatile` reference to an immutable map, or `ConcurrentHashMap`.
 
-**3. The Friday Deploy That Hung** — `shutdown()` alone doesn't interrupt running tasks; an uncooperative loop caused `awaitTermination` to time out and a hard kill corrupted writes. Fix: follow a timed-out `awaitTermination` with `shutdownNow()`, and make task code interruption-aware.
+</details>
 
-**4. The Mysterious Memory Growth** — Steady heap growth over days pointed to a `ThreadLocal` leak on a long-lived pool (confirmed via heap dump showing `Thread→ThreadLocalMap` growth) rather than queue growth (ruled out via flat queue-depth metrics).
+<details class="qa-item">
+<summary>2. The Vanishing Discount</summary>
 
-**5. The Load Balancer False Positive** — A shared thread pool let slow business requests delay the health-check endpoint, causing false-positive removals from load-balancer rotation. Fix: dedicated, isolated pool for health checks.
+— An `AtomicInteger`-based "first 500" promo counter was actually correct; the real bug was a swallowed exception in downstream `applyDiscount()` logic. Lesson: verify the atomic primitive is genuinely misused before blaming concurrency.
 
-**6. The Race That Only Happens in Kubernetes** — More cores in production increased the probability of hitting a pre-existing check-then-act race that rarely triggered on a lower-core staging environment. Fix: audit for check-then-act shapes and make them atomic (locking, `compute()`, or a DB-level unique constraint).
+</details>
 
-**7. The Cache That Made Things Slower** — A `ReadWriteLock` cache underperformed because actual traffic was closer to 50/50 read/write, not the read-heavy profile the lock is designed for. Fix: measure the actual ratio before choosing the lock type.
+<details class="qa-item">
+<summary>3. The Friday Deploy That Hung</summary>
 
-**8. The Silent Executor Rejection** — Fire-and-forget `executor.execute()` calls threw `RejectedExecutionException` under pool saturation with no logging/alerting, making a metrics outage invisible. Fix: explicit error handling on submission plus monitored rejection-count metrics.
+— `shutdown()` alone doesn't interrupt running tasks; an uncooperative loop caused `awaitTermination` to time out and a hard kill corrupted writes. Fix: follow a timed-out `awaitTermination` with `shutdownNow()`, and make task code interruption-aware.
+
+</details>
+
+<details class="qa-item">
+<summary>4. The Mysterious Memory Growth</summary>
+
+— Steady heap growth over days pointed to a `ThreadLocal` leak on a long-lived pool (confirmed via heap dump showing `Thread→ThreadLocalMap` growth) rather than queue growth (ruled out via flat queue-depth metrics).
+
+</details>
+
+<details class="qa-item">
+<summary>5. The Load Balancer False Positive</summary>
+
+— A shared thread pool let slow business requests delay the health-check endpoint, causing false-positive removals from load-balancer rotation. Fix: dedicated, isolated pool for health checks.
+
+</details>
+
+<details class="qa-item">
+<summary>6. The Race That Only Happens in Kubernetes</summary>
+
+— More cores in production increased the probability of hitting a pre-existing check-then-act race that rarely triggered on a lower-core staging environment. Fix: audit for check-then-act shapes and make them atomic (locking, `compute()`, or a DB-level unique constraint).
+
+</details>
+
+<details class="qa-item">
+<summary>7. The Cache That Made Things Slower</summary>
+
+— A `ReadWriteLock` cache underperformed because actual traffic was closer to 50/50 read/write, not the read-heavy profile the lock is designed for. Fix: measure the actual ratio before choosing the lock type.
+
+</details>
+
+<details class="qa-item">
+<summary>8. The Silent Executor Rejection</summary>
+
+— Fire-and-forget `executor.execute()` calls threw `RejectedExecutionException` under pool saturation with no logging/alerting, making a metrics outage invisible. Fix: explicit error handling on submission plus monitored rejection-count metrics.
+
+</details>

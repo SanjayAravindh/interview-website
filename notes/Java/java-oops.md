@@ -4,6 +4,28 @@
 
 ---
 
+## Table of Contents
+
+1. [Part 2: Encapsulation](#part-2-encapsulation)
+2. [Part 3: Abstraction](#part-3-abstraction)
+3. [Part 4: Inheritance](#part-4-inheritance)
+4. [Part 5: Polymorphism](#part-5-polymorphism)
+5. [Part 6: The `Object` Class and Equality](#part-6-the-object-class-and-equality)
+6. [Part 7: Immutability](#part-7-immutability)
+7. [Part 8: Composition](#part-8-composition)
+8. [Part 9: Cohesion and Coupling](#part-9-cohesion-and-coupling)
+9. [Part 10: SOLID](#part-10-solid)
+10. [Part 11: Design Patterns Through OOP](#part-11-design-patterns-through-oop)
+11. [Part 12: OOP in Real Java Applications (Summary)](#part-12-oop-in-real-java-applications-summary)
+12. [Part 13: Misconceptions Experienced Developers Know Beginners Often Get Wrong](#part-13-misconceptions-experienced-developers-know-beginners-often-get-wrong)
+
+---
+
+
+
+
+
+
 ## Lesson 1: Objects, Classes, State, Behavior, Identity, References
 
 **The problem:** Parallel-array data (`String[] names`, `double[] balances`) separates data from the operations on it — nothing groups related fields together, nothing protects them, and every new field means another array to keep in sync by hand.
@@ -393,44 +415,113 @@ A consolidated list (each traces back to a part above where it's covered in dept
 
 ---
 
-## Scenario-Based Questions — With Answers
+---
 
-**1. Building a `NotificationService` that only sends email today, with SMS/push "probably coming next year" — build the abstraction now?**
-Wait, but name the method around the domain action (`send(customer, message)`, not `sendEmail`) so extracting an interface later is cheap. "Probably next year" isn't a confirmed second implementation or testing seam yet — adding the interface now is speculative generality.
-
-**2. A controller does `user.getRoles().add(Role.ADMIN)` to grant admin access. What's wrong, and the fix?**
-`getRoles()` is leaking the live internal list, letting privilege escalation bypass any validation/audit trail. Fix: `getRoles()` returns `List.copyOf(roles)`; privilege changes go through an explicit `user.grantRole(Role.ADMIN)` method that can enforce authorization rules.
-
-**3. Overriding `equals()` on `Customer` by `email`, but a teammate wants `hashCode()` based on `id` since it's more stable — problem?**
-Breaks the equals/hashCode contract — equal-by-email customers could produce different hashes and land in different `HashMap` buckets, so lookups silently fail. `hashCode()` must derive from the same field(s) as `equals()`. If `id` genuinely feels more correct for identity, that's a sign `Customer`'s equality definition itself should be revisited (compare by `id` for both), not a reason to mismatch the two methods.
-
-**4. `Square` subclassing `Rectangle`, overriding both setters to keep width/height equal — "fine, a square IS a rectangle"?**
-Geometrically true, behaviorally false. Code written against `Rectangle` assumes independent `setWidth()`/`setHeight()`; `Square` can't honor that without violating its own invariant, silently breaking correct callers when substituted (LSP violation). Fix: model both as immutable `Shape`s exposing only `area()`, with no mutation contract to violate.
-
-**5. An 80-line `OrderService.checkout()` doing five things inline — is splitting it into five private methods on the same class enough for SRP?**
-Improves readability but not SRP — the class still has five unrelated reasons to change. Extract each concern into its own class (`OrderValidator`, `InventoryService`, `PaymentService`, `OrderRepository`, `NotificationSender`), injected into a thin orchestrating `OrderService`.
-
-**6. A junior adds a `TaxCalculatorStrategy` interface "to be safe" for a single-country app with no expansion plans — evaluate.**
-Push back: no real second implementation, no external dependency needing a test fake, no real plugin boundary — all three abstraction criteria fail, so it's speculative generality. Keep it a plain class; extraction later is cheap if the method is already named around the domain action.
-
-**7. Should `Order` be mutable for "consistency" with the mutable `ShoppingCart` it's created from?**
-No — `ShoppingCart` represents a value in flux (mutation is the point); `Order` represents a finalized fact once payment succeeds. `Order` should be immutable after creation, or expose only narrow, invariant-checked transitions (`markShipped()`) — matching mutability across different lifecycle stages isn't a design virtue.
-
-**8. A second `MockPaymentGateway` implementation is added purely for manual local testing — does this retroactively justify the original `PaymentGateway` interface?**
-Yes — a genuine second implementation existing and being used for any legitimate reason (manual dev testing counts) confirms the interface wasn't speculative; the original decision (assuming Stripe was an external dependency worth faking) was justified from the start.
-
-**9. Should transition legality for `OrderStatus` be a big `switch` inside `Order.transitionTo()`, or the State pattern?**
-A `switch` works but reintroduces the exact growth problem State solves — every new status/rule means editing the same shared method. State pattern makes new states additive (new class) instead. For only a few statuses with simple rules, a well-organized `switch` may genuinely be simpler — the point is naming which trade-off you're deliberately choosing, not defaulting out of habit.
-
-**10. `LoggingOrderRepository extends JpaOrderRepository`, overriding every method to log then call `super`. Better alternative?**
-Use Decorator instead: `LoggingOrderRepository implements OrderRepository`, wrapping a delegate `OrderRepository` and logging before delegating. This lets logging wrap *any* repository implementation, not just JPA specifically, with zero coupling to which concrete repository sits underneath.
 
 ---
 
-## Guess the Output — With Answers
+### Scenario-Based Questions — With Answers
 
-**1.**
-```java
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### Guess the Output — With Answers
+
+
+---
+
+## Practice Questions & Answers
+
+<details class="qa-item">
+<summary>1. Building a `NotificationService` that only sends email today, with SMS/push "probably coming next year" — build the abstraction now?</summary>
+
+Wait, but name the method around the domain action (`send(customer, message)`, not `sendEmail`) so extracting an interface later is cheap. "Probably next year" isn't a confirmed second implementation or testing seam yet — adding the interface now is speculative generality.
+
+</details>
+
+<details class="qa-item">
+<summary>2. A controller does `user.getRoles().add(Role.ADMIN)` to grant admin access. What's wrong, and the fix?</summary>
+
+`getRoles()` is leaking the live internal list, letting privilege escalation bypass any validation/audit trail. Fix: `getRoles()` returns `List.copyOf(roles)`; privilege changes go through an explicit `user.grantRole(Role.ADMIN)` method that can enforce authorization rules.
+
+</details>
+
+<details class="qa-item">
+<summary>3. Overriding `equals()` on `Customer` by `email`, but a teammate wants `hashCode()` based on `id` since it's more stable — problem?</summary>
+
+Breaks the equals/hashCode contract — equal-by-email customers could produce different hashes and land in different `HashMap` buckets, so lookups silently fail. `hashCode()` must derive from the same field(s) as `equals()`. If `id` genuinely feels more correct for identity, that's a sign `Customer`'s equality definition itself should be revisited (compare by `id` for both), not a reason to mismatch the two methods.
+
+</details>
+
+<details class="qa-item">
+<summary>4. `Square` subclassing `Rectangle`, overriding both setters to keep width/height equal — "fine, a square IS a rectangle"?</summary>
+
+Geometrically true, behaviorally false. Code written against `Rectangle` assumes independent `setWidth()`/`setHeight()`; `Square` can't honor that without violating its own invariant, silently breaking correct callers when substituted (LSP violation). Fix: model both as immutable `Shape`s exposing only `area()`, with no mutation contract to violate.
+
+</details>
+
+<details class="qa-item">
+<summary>5. An 80-line `OrderService.checkout()` doing five things inline — is splitting it into five private methods on the same class enough for SRP?</summary>
+
+Improves readability but not SRP — the class still has five unrelated reasons to change. Extract each concern into its own class (`OrderValidator`, `InventoryService`, `PaymentService`, `OrderRepository`, `NotificationSender`), injected into a thin orchestrating `OrderService`.
+
+</details>
+
+<details class="qa-item">
+<summary>6. A junior adds a `TaxCalculatorStrategy` interface "to be safe" for a single-country app with no expansion plans — evaluate.</summary>
+
+Push back: no real second implementation, no external dependency needing a test fake, no real plugin boundary — all three abstraction criteria fail, so it's speculative generality. Keep it a plain class; extraction later is cheap if the method is already named around the domain action.
+
+</details>
+
+<details class="qa-item">
+<summary>7. Should `Order` be mutable for "consistency" with the mutable `ShoppingCart` it's created from?</summary>
+
+No — `ShoppingCart` represents a value in flux (mutation is the point); `Order` represents a finalized fact once payment succeeds. `Order` should be immutable after creation, or expose only narrow, invariant-checked transitions (`markShipped()`) — matching mutability across different lifecycle stages isn't a design virtue.
+
+</details>
+
+<details class="qa-item">
+<summary>8. A second `MockPaymentGateway` implementation is added purely for manual local testing — does this retroactively justify the original `PaymentGateway` interface?</summary>
+
+Yes — a genuine second implementation existing and being used for any legitimate reason (manual dev testing counts) confirms the interface wasn't speculative; the original decision (assuming Stripe was an external dependency worth faking) was justified from the start.
+
+</details>
+
+<details class="qa-item">
+<summary>9. Should transition legality for `OrderStatus` be a big `switch` inside `Order.transitionTo()`, or the State pattern?</summary>
+
+A `switch` works but reintroduces the exact growth problem State solves — every new status/rule means editing the same shared method. State pattern makes new states additive (new class) instead. For only a few statuses with simple rules, a well-organized `switch` may genuinely be simpler — the point is naming which trade-off you're deliberately choosing, not defaulting out of habit.
+
+</details>
+
+<details class="qa-item">
+<summary>10. `LoggingOrderRepository extends JpaOrderRepository`, overriding every method to log then call `super`. Better alternative?</summary>
+
+Use Decorator instead: `LoggingOrderRepository implements OrderRepository`, wrapping a delegate `OrderRepository` and logging before delegating. This lets logging wrap *any* repository implementation, not just JPA specifically, with zero coupling to which concrete repository sits underneath.
+
+</details>
+
+<details class="qa-item">
+<summary>1. ```java</summary>
+
 class Box { int value; }
 Box a = new Box(); a.value = 10;
 Box b = a; b.value = 20;
@@ -438,8 +529,11 @@ System.out.println(a.value);
 ```
 **`20`** — `b = a` copies the reference; both point at the same heap object.
 
-**2.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>2. ```java</summary>
+
 class Animal { String name = "Animal"; String getName() { return "Animal"; } }
 class Dog extends Animal { String name = "Dog"; @Override String getName() { return "Dog"; } }
 Animal a = new Dog();
@@ -447,8 +541,11 @@ System.out.println(a.name); System.out.println(a.getName());
 ```
 **`Animal`, then `Dog`** — fields are resolved by declared type (not polymorphic, just hidden); methods use dynamic dispatch based on runtime type.
 
-**3.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>3. ```java</summary>
+
 class Animal { static String sound() { return "..."; } }
 class Dog extends Animal { static String sound() { return "Woof"; } }
 Animal a = new Dog();
@@ -456,23 +553,32 @@ System.out.println(a.sound());
 ```
 **`...`** — static methods can't be overridden, only hidden, and resolve by declared type at compile time.
 
-**4.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>4. ```java</summary>
+
 void print(int x) {...} void print(Integer x) {...} void print(long x) {...}
 print(5);
 ```
 **`int: 5`** — exact/widening match wins before boxing (`Integer`) or further widening (`long`) is tried.
 
-**5.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>5. ```java</summary>
+
 class Parent { Parent() { System.out.println("Parent constructor"); init(); } void init() { System.out.println("Parent init"); } }
 class Child extends Parent { int value = 10; Child() { System.out.println("Child constructor, value=" + value); } @Override void init() { System.out.println("Child init, value=" + value); } }
 new Child();
 ```
 **`Parent constructor` / `Child init, value=0` / `Child constructor, value=10`** — the superclass constructor calling an overridden method dispatches to the subclass version before the subclass's own field initializers have run, observing a partially-constructed object.
 
-**6.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>6. ```java</summary>
+
 class Point { int x, y; /* equals() by x,y; hashCode() NOT overridden */ }
 Set<Point> points = new HashSet<>();
 points.add(new Point(1, 2));
@@ -480,22 +586,31 @@ System.out.println(points.contains(new Point(1, 2)));
 ```
 **`false`** — `equals()` says equal, but the default identity-based `hashCode()` sends them to different buckets, so `contains()` searches the wrong bucket.
 
-**7.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>7. ```java</summary>
+
 void greet(String s) {...} void greet(Object o) {...}
 greet(null);
 ```
 **`String version`** — among overloads that could accept `null`, the compiler picks the most specific applicable type.
 
-**8.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>8. ```java</summary>
+
 String a = "hello"; String b = "hello"; String c = new String("hello");
 System.out.println(a == b); System.out.println(a == c); System.out.println(a.equals(c));
 ```
 **`true`, `false`, `true`** — literals are interned (pooled, same object); `new String(...)` forces a separate heap allocation; `.equals()` compares content regardless.
 
-**9.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>9. ```java</summary>
+
 class Shape { Shape create() { return new Shape(); } }
 class Circle extends Shape { @Override Circle create() { return new Circle(); } }
 Shape s = new Circle();
@@ -504,79 +619,119 @@ System.out.println(result.getClass().getSimpleName());
 ```
 **`Circle`** — covariant return narrows legally, and dynamic dispatch runs `Circle`'s version regardless of `s`'s declared type.
 
-**10.** `Child.process()` declaring `throws FileNotFoundException` (a subclass of `Parent`'s declared `IOException`) compiles — checked exceptions can only narrow in an override. Declaring `throws Exception` instead would **not** compile, since it's broader than what `Parent` promised callers.
+</details>
 
-**11.**
-```java
+<details class="qa-item">
+<summary>10. `Child.process()` declaring `throws FileNotFoundException` (a subclass of `Parent`'s declared `IOException`) compiles</summary>
+
+checked exceptions can only narrow in an override. Declaring `throws Exception` instead would **not** compile, since it's broader than what `Parent` promised callers.
+
+</details>
+
+<details class="qa-item">
+<summary>11. ```java</summary>
+
 class Config { static int a = getValue(); static int b = 10; static int getValue() { return b + 1; } }
 System.out.println(Config.a);
 ```
 **`1`** — static fields initialize top-to-bottom in source order; `b` is still `0` (default) when `getValue()` runs, since `b`'s own initializer hasn't executed yet.
 
-**12.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>12. ```java</summary>
+
 class Parent { protected void process() {...} }
 class Child extends Parent { @Override public void process() {...} }
 ```
 **Compiles** — overriding may widen access (`protected` → `public`), never narrow it.
 
-**13.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>13. ```java</summary>
+
 class Demo { int x = 5; { System.out.println("Instance block, x=" + x); x = 10; } Demo() { System.out.println("Constructor, x=" + x); } }
 new Demo();
 ```
 **`Instance block, x=5` / `Constructor, x=10`** — field initializers and instance blocks run in source order immediately before the constructor body, for every constructor.
 
-**14.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>14. ```java</summary>
+
 void test(int a, int b) {...} void test(int... nums) {...}
 test(1, 2);
 ```
 **`two-arg version`** — fixed-arity matches are tried before varargs is considered.
 
-**15.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>15. ```java</summary>
+
 interface A { default String greet() { return "A"; } }
 interface B { default String greet() { return "B"; } }
 class C implements A, B { }
 ```
 **Compile error** ("inherits unrelated defaults") — conflicting inherited defaults must be resolved explicitly, e.g. `A.super.greet()`.
 
-**16.** Passing `this` out of a constructor (e.g., `registry.register(this)`) before all fields are assigned risks exposing a **partially constructed object** — the general form of the constructor-overridable-method trap. Safe pattern: finish all field assignment first, and only hand out `this` as the constructor's last action, or after construction entirely.
+</details>
 
-**17.**
-```java
+<details class="qa-item">
+<summary>16. Passing `this` out of a constructor (e.g., `registry.register(this)`) before all fields are assigned risks exposing a **partially constructed object**</summary>
+
+the general form of the constructor-overridable-method trap. Safe pattern: finish all field assignment first, and only hand out `this` as the constructor's last action, or after construction entirely.
+
+</details>
+
+<details class="qa-item">
+<summary>17. ```java</summary>
+
 Object[] objects = new String[3];
 objects[0] = "fine";
 objects[1] = 42;
 ```
 Line 1–2 fine (array covariance: `String[]` assignable to `Object[]`). Line 3 compiles (type-checks against declared `Object[]`) but throws **`ArrayStoreException` at runtime**, since the JVM checks the array's actual runtime element type (really a `String[]`) on every store.
 
-**18.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>18. ```java</summary>
+
 class Money { BigDecimal amount; equals() also matches raw BigDecimal via instanceof }
 Money m = new Money(BigDecimal.TEN); BigDecimal b = BigDecimal.TEN;
 System.out.println(m.equals(b)); System.out.println(b.equals(m));
 ```
 **`true`, then `false`** — asymmetric, breaking the `.equals()` symmetry contract; comparing across unrelated types is a common way this bug is introduced. Prefer `getClass() != other.getClass()` over broad `instanceof` checks.
 
-**19.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>19. ```java</summary>
+
 Integer status = null;
 switch (status) { case 1 -> ...; default -> ...; }
 ```
 Throws **`NullPointerException`** — a classic `switch` on a boxed type must unbox to compare against `int` case labels, and unboxing `null` throws.
 
-**20.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>20. ```java</summary>
+
 void test(byte b) {...} void test(int i) {...}
 byte value = 5; test(value);
 final int x = 5; test(x);
 ```
 **`byte version`, then `int version`** — overload resolution uses the variable's *declared* type, not its runtime value or constant-ness; `x` is declared `int`, so it matches `test(int)` even though `5` would fit in a `byte`.
 
-**21.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>21. ```java</summary>
+
 class Base { void handle(Object o) {...} }
 class Derived extends Base { void handle(String s) {...} } // overload, not override
 Base ref = new Derived();
@@ -584,8 +739,11 @@ ref.handle("hello");
 ```
 **`Base: Object`** — `handle(String)` is an unrelated overload, not an override; overload resolution is compile-time based on `ref`'s declared type `Base`, which only has `handle(Object)`.
 
-**22.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>22. ```java</summary>
+
 enum Operation {
     ADD { public int apply(int a, int b) { return a + b; } },
     MULTIPLY { public int apply(int a, int b) { return a * b; } };
@@ -594,33 +752,55 @@ enum Operation {
 ```
 `Operation.ADD.apply(3,4)` → **`7`**; `Operation.MULTIPLY.apply(3,4)` → **`12`** — each enum constant is an anonymous subclass with its own override; genuine per-constant polymorphism, no `switch` needed.
 
-**23.** A `Derived.risky()` override, given `Base.risky()` declares no checked exceptions, needs no `try/catch` at a `Base`-typed call site — the compiler guarantees this from `Base`'s signature alone, since overrides can never throw broader checked exceptions than the supertype declared.
+</details>
 
-**24.** A non-static inner class can access the enclosing instance's `private` fields (implicit outer-instance reference); a `static` nested class **cannot** — it has no enclosing-instance reference at all. Choose static nested when the nested class doesn't need enclosing-instance state (e.g., `Builder`).
+<details class="qa-item">
+<summary>23. A `Derived.risky()` override, given `Base.risky()` declares no checked exceptions, needs no `try/catch` at a `Base`-typed call site</summary>
 
-**25.**
-```java
+the compiler guarantees this from `Base`'s signature alone, since overrides can never throw broader checked exceptions than the supertype declared.
+
+</details>
+
+<details class="qa-item">
+<summary>24. A non-static inner class can access the enclosing instance's `private` fields (implicit outer-instance reference); a `static` nested class **cannot**</summary>
+
+it has no enclosing-instance reference at all. Choose static nested when the nested class doesn't need enclosing-instance state (e.g., `Builder`).
+
+</details>
+
+<details class="qa-item">
+<summary>25. ```java</summary>
+
 static int test() { try { return 1; } finally { return 2; } }
 ```
 **`2`** — a `return` inside `finally` unconditionally overrides any `try`/`catch` return (or even an in-flight exception). Considered an anti-pattern for production code.
 
-**26.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>26. ```java</summary>
+
 interface Shape { static String describe() { return "A shape"; } }
 class Circle implements Shape { }
 Circle.describe();
 ```
 **Compile error** — interface `static` methods are not inherited by implementing classes; must call `Shape.describe()` directly.
 
-**27.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>27. ```java</summary>
+
 void call(long l) {...} void call(Integer i) {...} void call(int... nums) {...}
 call(5);
 ```
 **`long`** — widening primitive conversion (`int`→`long`) beats autoboxing (`Integer`), which beats varargs, in that fixed order.
 
-**28.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>28. ```java</summary>
+
 class Counter { static int count = 0; }
 class SpecialCounter extends Counter { }
 Counter.count = 5; System.out.println(SpecialCounter.count);
@@ -628,8 +808,11 @@ SpecialCounter.count = 10; System.out.println(Counter.count);
 ```
 **`5`, then `10`** — `SpecialCounter` declares no `count` of its own, so `SpecialCounter.count` is just alternate syntax for the same single shared static field (contrast with field hiding, where a subclass *does* declare its own field).
 
-**29.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>29. ```java</summary>
+
 class Team {
     Team(List<String> members) { this.members = new ArrayList<>(members); } // copies IN
     List<String> getMembers() { return members; } // NOT copied out
@@ -637,8 +820,13 @@ class Team {
 ```
 Mutating the original list post-construction has no effect (constructor copy works); but `team.getMembers().add("Charlie")` **does** mutate `Team`'s internal state — immutability requires defensive copying in *both* directions, not just the constructor.
 
-**30.**
-```java
+</details>
+
+<details class="qa-item">
+<summary>30. ```java</summary>
+
 if (obj instanceof String s && s.length() > 3) { ... } else { System.out.println(s); }
 ```
 The `else` branch **does not compile** — `s`'s pattern-variable scope only covers where the compiler can prove the `instanceof` succeeded; reaching `else` doesn't guarantee that.
+
+</details>
