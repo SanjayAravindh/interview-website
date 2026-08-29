@@ -4,6 +4,7 @@
   "description": "Browse local markdown interview notes in a sidebar and render them as HTML.",
   "scripts": {
     "start": "node server.js",
-    "build": "node build-notes.js"
+    "build": "node build-notes.js",
+    "publish-site": "node scripts/publish-site.js"
   }
 }
