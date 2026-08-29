@@ -13,11 +13,12 @@
 5. [Part 6: The `Object` Class and Equality](#part-6-the-object-class-and-equality)
 6. [Part 7: Immutability](#part-7-immutability)
 7. [Part 8: Composition](#part-8-composition)
-8. [Part 9: Cohesion and Coupling](#part-9-cohesion-and-coupling)
-9. [Part 10: SOLID](#part-10-solid)
-10. [Part 11: Design Patterns Through OOP](#part-11-design-patterns-through-oop)
-11. [Part 12: OOP in Real Java Applications (Summary)](#part-12-oop-in-real-java-applications-summary)
-12. [Part 13: Misconceptions Experienced Developers Know Beginners Often Get Wrong](#part-13-misconceptions-experienced-developers-know-beginners-often-get-wrong)
+8. [Part 8b: Aggregation](#part-8b-aggregation)
+9. [Part 9: Cohesion and Coupling](#part-9-cohesion-and-coupling)
+10. [Part 10: SOLID](#part-10-solid)
+11. [Part 11: Design Patterns Through OOP](#part-11-design-patterns-through-oop)
+12. [Part 12: OOP in Real Java Applications (Summary)](#part-12-oop-in-real-java-applications-summary)
+13. [Part 13: Misconceptions Experienced Developers Know Beginners Often Get Wrong](#part-13-misconceptions-experienced-developers-know-beginners-often-get-wrong)
 
 ---
 
@@ -299,6 +300,64 @@ Swapping `PetrolEngine` for `ElectricEngine` requires zero changes to `Car`. Thi
 
 ---
 
+## Part 8b: Aggregation
+
+**The problem:** Modeling every HAS-A as composition forces you to own another object's entire lifecycle even when the real domain says "uses / groups / references" — e.g. a `Department` listing `Professor`s who also teach elsewhere, or a `Playlist` holding `Song`s that exist on their own. Treating those as composition (creating/destroying professors with the department, or deleting songs when a playlist is removed) violates the business model.
+
+**Core idea:** Aggregation is a **weak HAS-A** (shared ownership). The container holds references to parts that have an **independent lifecycle** — parts can exist before the container, after it is destroyed, and often in multiple containers at once. In UML this is the **hollow diamond**; composition is the **filled diamond**.
+
+| | Aggregation (weak) | Composition (strong) |
+|---|---|---|
+| Lifecycle | Part outlives container | Part dies with container |
+| Ownership | Shared — part can belong to several containers | Exclusive — container owns creation/destruction |
+| Typical verb | "has members / references / contains" | "is made of / consists of" |
+| Example | Department ↔ Professor, Playlist ↔ Song, Team ↔ Player | House ↔ Room, Order ↔ OrderLine, Car ↔ Engine (when engine is created inside `Car`) |
+
+```java
+class Professor {
+    private final String name;
+    Professor(String name) { this.name = name; }
+}
+
+class Department {
+    private final List<Professor> professors;          // references, not owned exclusively
+    Department(List<Professor> professors) {
+        this.professors = new ArrayList<>(professors); // defensive copy of references
+    }
+    List<Professor> getProfessors() { return List.copyOf(professors); }
+}
+
+Professor p = new Professor("Alice");
+Department cs = new Department(List.of(p));
+Department math = new Department(List.of(p)); // same professor, two departments — valid aggregation
+
+// p still exists after departments are discarded; playlists removed don't delete songs
+```
+
+Contrast with composition from Part 8 — `OrderLine` lines are meaningless without their `Order`; you create them inside `placeOrder()` and never reuse them elsewhere:
+
+```java
+class Order {
+    private final List<OrderLine> lines = new ArrayList<>();
+    void addLine(String sku, int qty) {
+        lines.add(new OrderLine(sku, qty)); // created here, dies with this order
+    }
+}
+```
+
+**In Java:** aggregation vs composition is **not a keyword** — both are field references. The distinction is **design intent and lifecycle rules**: who creates the object, whether it is shared, and whether destroying the container should destroy the part. Document that in constructors/factories and team conventions.
+
+**Trade-offs:** Aggregation matches real shared entities (people, catalog items, reusable assets) and avoids accidental deletion of shared data. It requires clear rules about mutability and shared-state bugs (two departments mutating the same `Professor` object). Composition gives simpler mental models and safer defaults when parts truly belong to one parent.
+
+**Misconceptions:**
+- "Aggregation means a `List` field" → a list of owned `OrderLine`s is composition; a list of shared `Song` references is aggregation — same syntax, different lifecycle contract.
+- "UML aggregation changes how Java works" → it guides modeling and API design; Java only sees references.
+- "Aggregation is just a weaker form of composition, so always pick composition" → when parts are catalog/master data or shared across aggregates, composition models the domain wrong and causes data-loss bugs on delete.
+
+**Mental model:** Aggregation = weak HAS-A with **shared ownership and independent lifecycle** (hollow diamond). Composition = strong HAS-A where the container **owns** the part's existence (filled diamond). In Java both look like fields; choose based on whether destroying or removing the container should destroy the part — and whether the part can legitimately outlive or be shared by multiple containers.
+
+---
+
 ## Part 9: Cohesion and Coupling
 
 **The problem — low cohesion:** `OrderManager` with `createOrder`, `calculateTax`, `sendWelcomeEmail`, `generateShippingLabel`, `logAuditEvent`, `formatCurrency` — six barely-related responsibilities in one class.
@@ -402,14 +461,15 @@ A consolidated list (each traces back to a part above where it's covered in dept
 11. **`final` makes an object immutable** — only prevents field reassignment (Part 7).
 12. **A record is always better than a normal class** — wrong for behavior-heavy or inheritance-needing classes (Part 7).
 13. **Composition means dependency injection** — composition is the structural relationship; DI is one wiring technique (Part 8).
-14. **Design patterns always improve code** — only when the pattern's originating problem is genuinely present (Part 11).
-15. **More classes means better OOP** — same error as #1 and #7; cohesion/coupling/correct modeling matter, not class count.
-16. **Getters and setters are always good** — fine for unconstrained data, a smell for invariant-bearing fields (Part 2).
-17. **Private constructors automatically make objects immutable** — only controls who can construct, not post-construction mutation (Part 7).
-18. **An abstract class is simply a class that cannot be instantiated** — non-instantiability is a side effect of an incomplete blueprint (partial implementation + unfinished contract), not the defining purpose.
-19. **Interfaces cannot contain implementation** — since Java 8, `default`/`static` methods can carry real implementation (e.g., `Comparator.reversed()`); interfaces still can't hold instance state, though.
-20. **Java does not support multiple inheritance** — true only for class implementation inheritance; a class can implement any number of interfaces (multiple inheritance of contract/default behavior).
-21. **Overloading is runtime polymorphism / Overriding is compile-time polymorphism** — exactly backwards: overloading resolves at compile time, overriding resolves at runtime via dynamic dispatch (Part 5).
+14. **Aggregation and composition are the same in Java** — both are field references; the difference is lifecycle and shared ownership (Part 8b vs Part 8).
+15. **Design patterns always improve code** — only when the pattern's originating problem is genuinely present (Part 11).
+16. **More classes means better OOP** — same error as #1 and #7; cohesion/coupling/correct modeling matter, not class count.
+17. **Getters and setters are always good** — fine for unconstrained data, a smell for invariant-bearing fields (Part 2).
+18. **Private constructors automatically make objects immutable** — only controls who can construct, not post-construction mutation (Part 7).
+19. **An abstract class is simply a class that cannot be instantiated** — non-instantiability is a side effect of an incomplete blueprint (partial implementation + unfinished contract), not the defining purpose.
+20. **Interfaces cannot contain implementation** — since Java 8, `default`/`static` methods can carry real implementation (e.g., `Comparator.reversed()`); interfaces still can't hold instance state, though.
+21. **Java does not support multiple inheritance** — true only for class implementation inheritance; a class can implement any number of interfaces (multiple inheritance of contract/default behavior).
+22. **Overloading is runtime polymorphism / Overriding is compile-time polymorphism** — exactly backwards: overloading resolves at compile time, overriding resolves at runtime via dynamic dispatch (Part 5).
 
 **Root-cause mental model:** nearly every misconception above comes from mistaking a mechanical Java rule (the `private` keyword, `final`, "can't instantiate," "no multiple inheritance") for the design principle it was meant to serve (protecting invariants, genuine immutability, incomplete contracts, avoiding implementation ambiguity). Always ask: is this a hard language rule, or a design goal the language merely gives tools to pursue?
 
