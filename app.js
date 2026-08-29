@@ -232,6 +232,7 @@
     });
   }
 
+  function scrollToHeading(id) {
     if (!id) return false;
     const el = document.getElementById(id);
     if (!el) return false;
