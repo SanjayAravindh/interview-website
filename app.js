@@ -85,13 +85,32 @@
     return groups;
   }
 
+  function sidebarTitle(title) {
+    let t = String(title).trim();
+    const emDash = t.indexOf(" — ");
+    if (emDash !== -1) {
+      t = t.slice(0, emDash).trim();
+    } else {
+      const colon = t.indexOf(": ");
+      if (colon !== -1) {
+        t = t.slice(0, colon).trim();
+      }
+    }
+    t = t.replace(/^Senior-Level\s+/i, "");
+    t = t.replace(/^Master\s+/i, "");
+    t = t.replace(/\s+Mastery$/i, "");
+    t = t.replace(/\s+Course$/i, "");
+    return t.trim();
+  }
+
   function noteLink(note, activeId) {
     const active = note.id === activeId ? "active" : "";
     const href = `?note=${encodeURIComponent(note.id)}`;
+    const label = sidebarTitle(note.title);
     return `
       <li>
         <a href="${href}" class="${active}" data-id="${escapeHtml(note.id)}">
-          ${escapeHtml(note.title)}
+          ${escapeHtml(label)}
         </a>
       </li>
     `;
