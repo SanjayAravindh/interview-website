@@ -6,18 +6,18 @@ PostgreSQL 15+ / MySQL 8+ / Spring Data JPA / Hibernate 6.x / Kafka 3.x. Distrib
 
 ## Table of Contents
 
-1. [1. Mental Model: Data Reliability in Distributed Systems](#1-mental-model-data-reliability-in-distributed-systems)
-2. [2. Data Reconciliation](#2-data-reconciliation)
-3. [3. Data Repair](#3-data-repair)
-4. [4. Event Replay Strategies](#4-event-replay-strategies)
-5. [5. Idempotency Keys](#5-idempotency-keys)
-6. [6. Optimistic Locking](#6-optimistic-locking)
-7. [7. Pessimistic Locking](#7-pessimistic-locking)
-8. [8. Lost Update Problem](#8-lost-update-problem)
-9. [9. Combining Patterns — End-to-End Reliability](#9-combining-patterns--end-to-end-reliability)
-10. [10. Production Debugging Playbook](#10-production-debugging-playbook)
-11. [11. Quick Decision Matrix](#11-quick-decision-matrix)
-12. [12. Interview Q&A — 20 Senior Questions](#12-interview-qa--20-senior-questions)
+1. [Mental Model: Data Reliability in Distributed Systems](#1-mental-model-data-reliability-in-distributed-systems)
+2. [Data Reconciliation](#2-data-reconciliation)
+3. [Data Repair](#3-data-repair)
+4. [Event Replay Strategies](#4-event-replay-strategies)
+5. [Idempotency Keys](#5-idempotency-keys)
+6. [Optimistic Locking](#6-optimistic-locking)
+7. [Pessimistic Locking](#7-pessimistic-locking)
+8. [Lost Update Problem](#8-lost-update-problem)
+9. [Combining Patterns — End-to-End Reliability](#9-combining-patterns-end-to-end-reliability)
+10. [Production Debugging Playbook](#10-production-debugging-playbook)
+11. [Quick Decision Matrix](#11-quick-decision-matrix)
+12. [Interview Q&A — 20 Senior Questions](#12-interview-qa-20-senior-questions)
 
 ---
 

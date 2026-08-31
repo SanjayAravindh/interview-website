@@ -8,19 +8,19 @@ The focus is requests/limits, QoS and eviction, autoscaling at pod/node/cluster 
 
 ## Table of Contents
 
-1. [1. Mental Model: One Pod Through the Scheduler and Autoscalers](#1-mental-model-one-pod-through-the-scheduler-and-autoscalers)
-2. [2. Resource Requests & Limits](#2-resource-requests--limits)
-3. [3. QoS Classes, Eviction, and OOM Behavior](#3-qos-classes-eviction-and-oom-behavior)
-4. [4. LimitRanges & ResourceQuotas](#4-limitranges--resourcequotas)
-5. [5. Horizontal Pod Autoscaler (HPA)](#5-horizontal-pod-autoscaler-hpa)
-6. [6. Vertical Pod Autoscaler (VPA)](#6-vertical-pod-autoscaler-vpa)
-7. [7. Cluster Autoscaler](#7-cluster-autoscaler)
-8. [8. Pod Disruption Budget (PDB)](#8-pod-disruption-budget-pdb)
-9. [9. Combining HPA, VPA, Cluster Autoscaler, and PDB](#9-combining-hpa-vpa-cluster-autoscaler-and-pdb)
-10. [10. JVM and Workload-Specific Sizing](#10-jvm-and-workload-specific-sizing)
-11. [11. Production Debugging Playbook](#11-production-debugging-playbook)
-12. [12. Quick Decision Matrix](#12-quick-decision-matrix)
-13. [13. Scenario-Based Questions](#13-scenario-based-questions)
+1. [Mental Model: One Pod Through the Scheduler and Autoscalers](#1-mental-model-one-pod-through-the-scheduler-and-autoscalers)
+2. [Resource Requests & Limits](#2-resource-requests-limits)
+3. [QoS Classes, Eviction, and OOM Behavior](#3-qos-classes-eviction-and-oom-behavior)
+4. [LimitRanges & ResourceQuotas](#4-limitranges-resourcequotas)
+5. [Horizontal Pod Autoscaler (HPA)](#5-horizontal-pod-autoscaler-hpa)
+6. [Vertical Pod Autoscaler (VPA)](#6-vertical-pod-autoscaler-vpa)
+7. [Cluster Autoscaler](#7-cluster-autoscaler)
+8. [Pod Disruption Budget (PDB)](#8-pod-disruption-budget-pdb)
+9. [Combining HPA, VPA, Cluster Autoscaler, and PDB](#9-combining-hpa-vpa-cluster-autoscaler-and-pdb)
+10. [JVM and Workload-Specific Sizing](#10-jvm-and-workload-specific-sizing)
+11. [Production Debugging Playbook](#11-production-debugging-playbook)
+12. [Quick Decision Matrix](#12-quick-decision-matrix)
+13. [Scenario-Based Questions](#13-scenario-based-questions)
 
 ---
 

@@ -6,22 +6,22 @@ Spring Boot 3.x / Java 17+ / Kubernetes 1.28+. Cloud-agnostic patterns with AWS/
 
 ## Table of Contents
 
-1. [1. Mental Model: One Request Through the Capacity Stack](#1-mental-model-one-request-through-the-capacity-stack)
-2. [2. Horizontal Scaling](#2-horizontal-scaling)
-3. [3. Vertical Scaling](#3-vertical-scaling)
-4. [4. Autoscaling](#4-autoscaling)
-5. [5. Capacity Planning](#5-capacity-planning)
-6. [6. High Availability](#6-high-availability)
-7. [7. Multi-region Deployment](#7-multi-region-deployment)
-8. [8. Disaster Recovery](#8-disaster-recovery)
-9. [9. RPO and RTO](#9-rpo-and-rto)
-10. [10. Connection Pooling](#10-connection-pooling)
-11. [11. Resource Exhaustion](#11-resource-exhaustion)
-12. [12. Spring Boot & Kubernetes Integration](#12-spring-boot--kubernetes-integration)
-13. [13. Observability for Scale and Availability](#13-observability-for-scale-and-availability)
-14. [14. Production Debugging Playbook](#14-production-debugging-playbook)
-15. [15. Quick Decision Matrix](#15-quick-decision-matrix)
-16. [16. Interview Q&A](#16-interview-qa)
+1. [Mental Model: One Request Through the Capacity Stack](#1-mental-model-one-request-through-the-capacity-stack)
+2. [Horizontal Scaling](#2-horizontal-scaling)
+3. [Vertical Scaling](#3-vertical-scaling)
+4. [Autoscaling](#4-autoscaling)
+5. [Capacity Planning](#5-capacity-planning)
+6. [High Availability](#6-high-availability)
+7. [Multi-region Deployment](#7-multi-region-deployment)
+8. [Disaster Recovery](#8-disaster-recovery)
+9. [RPO and RTO](#9-rpo-and-rto)
+10. [Connection Pooling](#10-connection-pooling)
+11. [Resource Exhaustion](#11-resource-exhaustion)
+12. [Spring Boot & Kubernetes Integration](#12-spring-boot-kubernetes-integration)
+13. [Observability for Scale and Availability](#13-observability-for-scale-and-availability)
+14. [Production Debugging Playbook](#14-production-debugging-playbook)
+15. [Quick Decision Matrix](#15-quick-decision-matrix)
+16. [Interview Q&A](#16-interview-qa)
 
 ---
 

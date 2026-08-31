@@ -225,6 +225,12 @@
     return out.join("\n");
   }
 
+  function stripTocLabel(text) {
+    return String(text)
+      .trim()
+      .replace(/^\d+\.\s+/, "");
+  }
+
   function insertTableOfContents(md) {
     if (/^##\s+Table of Contents\s*$/im.test(md)) return md;
 
@@ -242,7 +248,8 @@
     if (headings.length < 2) return md;
 
     const items = headings.map((h, idx) => {
-      return `${idx + 1}. [${h.text}](#${headingSlug(h.text)})`;
+      const label = stripTocLabel(h.text);
+      return `${idx + 1}. [${label}](#${headingSlug(h.text)})`;
     });
     const tocBlock = `## Table of Contents\n\n${items.join("\n")}\n\n---\n`;
     const firstHr = md.indexOf("\n---\n");
@@ -380,7 +387,9 @@
     } else {
       history.pushState(null, "", `#${encodeURIComponent(id)}`);
     }
-    scrollToHeading(id);
+    if (!scrollToHeading(id)) {
+      /* anchor missing — stale TOC or duplicate heading slug */
+    }
   });
 
   window.addEventListener("hashchange", () => {

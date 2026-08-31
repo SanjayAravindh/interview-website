@@ -6,22 +6,22 @@ Microservices, multi-region deployments, and cloud-native stacks. This is not a 
 
 ## Table of Contents
 
-1. [1. Mental Model: What Breaks First in Distributed Systems](#1-mental-model-what-breaks-first-in-distributed-systems)
-2. [2. CAP Theorem](#2-cap-theorem)
-3. [3. PACELC Theorem](#3-pacelc-theorem)
-4. [4. Consistency Models — The Full Spectrum](#4-consistency-models--the-full-spectrum)
-5. [5. Strong Consistency](#5-strong-consistency)
-6. [6. Eventual Consistency](#6-eventual-consistency)
-7. [7. Network Partitions](#7-network-partitions)
-8. [8. Split Brain](#8-split-brain)
-9. [9. Clock Synchronization](#9-clock-synchronization)
-10. [10. Distributed Consensus](#10-distributed-consensus)
-11. [11. Quorum](#11-quorum)
-12. [12. Leader Election](#12-leader-election)
-13. [13. Putting It Together: System Profiles](#13-putting-it-together-system-profiles)
-14. [14. Production Debugging Playbook](#14-production-debugging-playbook)
-15. [15. Quick Decision Matrix](#15-quick-decision-matrix)
-16. [16. Scenario Q&A — Interview and Production](#16-scenario-qa--interview-and-production)
+1. [Mental Model: What Breaks First in Distributed Systems](#1-mental-model-what-breaks-first-in-distributed-systems)
+2. [CAP Theorem](#2-cap-theorem)
+3. [PACELC Theorem](#3-pacelc-theorem)
+4. [Consistency Models — The Full Spectrum](#4-consistency-models-the-full-spectrum)
+5. [Strong Consistency](#5-strong-consistency)
+6. [Eventual Consistency](#6-eventual-consistency)
+7. [Network Partitions](#7-network-partitions)
+8. [Split Brain](#8-split-brain)
+9. [Clock Synchronization](#9-clock-synchronization)
+10. [Distributed Consensus](#10-distributed-consensus)
+11. [Quorum](#11-quorum)
+12. [Leader Election](#12-leader-election)
+13. [Putting It Together: System Profiles](#13-putting-it-together-system-profiles)
+14. [Production Debugging Playbook](#14-production-debugging-playbook)
+15. [Quick Decision Matrix](#15-quick-decision-matrix)
+16. [Scenario Q&A — Interview and Production](#16-scenario-qa-interview-and-production)
 
 ---
 

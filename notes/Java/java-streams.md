@@ -5,15 +5,15 @@
 
 ## Table of Contents
 
-1. [1. What Streams Are (and aren't)](#1-what-streams-are-and-arent)
-2. [2. Creating Streams](#2-creating-streams)
-3. [3. Intermediate Operations (lazy, return a Stream)](#3-intermediate-operations-lazy-return-a-stream)
-4. [4. Terminal Operations (eager, trigger execution)](#4-terminal-operations-eager-trigger-execution)
-5. [5. Collectors (the deep part)](#5-collectors-the-deep-part)
-6. [6. Primitive Streams](#6-primitive-streams)
-7. [7. Optional (streams' constant companion)](#7-optional-streams-constant-companion)
-8. [8. Parallel Streams](#8-parallel-streams)
-9. [9. Common Pitfalls](#9-common-pitfalls)
+1. [What Streams Are (and aren't)](#1-what-streams-are-and-arent)
+2. [Creating Streams](#2-creating-streams)
+3. [Intermediate Operations (lazy, return a Stream)](#3-intermediate-operations-lazy-return-a-stream)
+4. [Terminal Operations (eager, trigger execution)](#4-terminal-operations-eager-trigger-execution)
+5. [Collectors (the deep part)](#5-collectors-the-deep-part)
+6. [Primitive Streams](#6-primitive-streams)
+7. [Optional (streams' constant companion)](#7-optional-streams-constant-companion)
+8. [Parallel Streams](#8-parallel-streams)
+9. [Common Pitfalls](#9-common-pitfalls)
 10. [Quick Self-Check](#quick-self-check)
 
 ---
