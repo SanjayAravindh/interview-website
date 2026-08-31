@@ -75,14 +75,32 @@
     return url;
   }
 
+  function compareCurriculum(a, b) {
+    const folderA = a.description || "Notes";
+    const folderB = b.description || "Notes";
+    const folderOrderA = a.folderOrder ?? 9999;
+    const folderOrderB = b.folderOrder ?? 9999;
+    if (folderOrderA !== folderOrderB) return folderOrderA - folderOrderB;
+    const noteOrderA = a.noteOrder ?? 9999;
+    const noteOrderB = b.noteOrder ?? 9999;
+    if (noteOrderA !== noteOrderB) return noteOrderA - noteOrderB;
+    return folderA.localeCompare(folderB) || a.id.localeCompare(b.id);
+  }
+
   function groupNotesByFolder(list) {
+    const sorted = [...list].sort(compareCurriculum);
     const groups = new Map();
-    for (const note of list) {
+    for (const note of sorted) {
       const folder = note.description || "Notes";
       if (!groups.has(folder)) groups.set(folder, []);
       groups.get(folder).push(note);
     }
     return groups;
+  }
+
+  function groupDisplayLabel(folder, folderNotes) {
+    const fromNote = folderNotes[0]?.groupLabel;
+    return fromNote || folder;
   }
 
   function sidebarTitle(title) {
@@ -119,9 +137,15 @@
   function renderNav(activeId) {
     const groups = groupNotesByFolder(notes);
     const html = [];
-    for (const [folder, folderNotes] of groups) {
+    const folderKeys = [...groups.keys()].sort((a, b) => {
+      const orderA = groups.get(a)[0]?.folderOrder ?? 9999;
+      const orderB = groups.get(b)[0]?.folderOrder ?? 9999;
+      return orderA - orderB || a.localeCompare(b);
+    });
+    for (const folder of folderKeys) {
+      const folderNotes = groups.get(folder);
       html.push(`<li class="topic-group">
-        <p class="topic-group-label">${escapeHtml(folder)}</p>
+        <p class="topic-group-label">${escapeHtml(groupDisplayLabel(folder, folderNotes))}</p>
         <ul class="topic-group-list">
           ${folderNotes.map((note) => noteLink(note, activeId)).join("")}
         </ul>
@@ -395,7 +419,7 @@
   async function init() {
     try {
       const data = await loadNotesIndex();
-      notes = Array.isArray(data.notes) ? data.notes : [];
+      notes = Array.isArray(data.notes) ? data.notes.sort(compareCurriculum) : [];
       if (!notes.length) {
         setPlaceholder("No markdown files yet. Add .md files under notes/ (subfolders are fine), then refresh.");
         renderNav(null);
