@@ -29,7 +29,6 @@ Microservices, polyglot persistence, Kafka CDC, and cloud-native data platforms.
 21. [Schema Migration](#21-schema-migration)
 22. [Production Debugging Playbook](#22-production-debugging-playbook)
 23. [Quick Decision Matrix](#23-quick-decision-matrix)
-24. [Interview Q&A — Senior Production Scenarios](#24-interview-qa-senior-production-scenarios)
 
 ---
 
@@ -1404,245 +1403,365 @@ Never run heuristic XA rollback in production without TM runbook. Never "fix" st
 
 ---
 
-## 24. Interview Q&A — Senior Production Scenarios
+## Practice Questions & Answers
 
-### Q1. Why not use 2PC for all microservice transactions?
+<details class="qa-item">
+<summary>1. Why not use 2PC for all microservice transactions?</summary>
 
-**Answer.** 2PC blocks resources during prepare, needs durable coordinator, performs poorly across heterogeneous systems and WAN latency. Failure leaves in-doubt transactions. Microservices prioritize **availability and autonomy** — sagas with compensations match that; 2PC matches legacy same-DC homogeneous stacks.
-
----
-
-### Q2. How does outbox differ from dual write?
-
-**Answer.** Dual write: DB commit then Kafka publish — crash between = inconsistency. Outbox: same local TX inserts row + outbox record — atomic. Relay may duplicate to broker; consumers idempotent. Outbox fixes **ordering with commit**; dual write does not.
+2PC blocks resources during prepare, needs durable coordinator, performs poorly across heterogeneous systems and WAN latency. Failure leaves in-doubt transactions. Microservices prioritize **availability and autonomy** — sagas with compensations match that; 2PC matches legacy same-DC homogeneous stacks.
 
 ---
 
-### Q3. Choreography or orchestrator for checkout?
+</details>
 
-**Answer.** 3–4 linear steps with clear events: choreography OK with discipline. Branching (payment method, fraud hold, partial ship): orchestrator (Temporal/Camunda) gives visibility, timeouts, and compensation order. Hybrid: orchestrate payment path, choreograph notifications.
+<details class="qa-item">
+<summary>2. How does outbox differ from dual write?</summary>
 
----
-
-### Q4. What is a compensating transaction vs rollback?
-
-**Answer.** Rollback undoes uncommitted work in one DB session. Compensation is **new business action** after commit — refund, release reservation, credit note. Cannot rollback committed charge; must refund with idempotency.
+Dual write: DB commit then Kafka publish — crash between = inconsistency. Outbox: same local TX inserts row + outbox record — atomic. Relay may duplicate to broker; consumers idempotent. Outbox fixes **ordering with commit**; dual write does not.
 
 ---
 
-### Q5. How do you guarantee read-your-writes after creating an order?
+</details>
 
-**Answer.** Read from primary after write; return `ETag`/version to client; BFF passes version to list API; or short client poll until visible; or route session to same replica with lag check. Do not read search index for confirmation.
+<details class="qa-item">
+<summary>3. Choreography or orchestrator for checkout?</summary>
 
----
-
-### Q6. Explain CQRS without event sourcing.
-
-**Answer.** Separate write model (normalized PG) and read model (denormalized table or ES). Projector syncs via outbox events or CDC. Writes go to command side; queries hit read side. No event store as SoT — current write table still authoritative.
+3–4 linear steps with clear events: choreography OK with discipline. Branching (payment method, fraud hold, partial ship): orchestrator (Temporal/Camunda) gives visibility, timeouts, and compensation order. Hybrid: orchestrate payment path, choreograph notifications.
 
 ---
 
-### Q7. When would you use event sourcing?
+</details>
 
-**Answer.** Audit/legal replay, temporal queries, complex aggregate lifecycle, multiple projections from same history. Avoid for simple CRUD with no audit need — operational cost of schema evolution and GDPR is high.
+<details class="qa-item">
+<summary>4. What is a compensating transaction vs rollback?</summary>
 
----
-
-### Q8. CDC vs application publishing events?
-
-**Answer.** Application events: rich domain semantics, explicit versioning, only business-meaningful changes. CDC: captures all row changes including admin fixes, bypasses app bugs missing publish, enables legacy integration. Often **both**: domain events via outbox + CDC for analytics replica.
+Rollback undoes uncommitted work in one DB session. Compensation is **new business action** after commit — refund, release reservation, credit note. Cannot rollback committed charge; must refund with idempotency.
 
 ---
 
-### Q9. How to handle duplicate Kafka messages?
+</details>
 
-**Answer.** Idempotent consumer: `processed_events(event_id)` unique index; business idempotency keys; upsert read models; deterministic handlers. At-least-once + idempotency = effective exactly-once processing.
+<details class="qa-item">
+<summary>5. How do you guarantee read-your-writes after creating an order?</summary>
 
----
-
-### Q10. Shard key for multi-tenant SaaS?
-
-**Answer.** `tenant_id` if tenants evenly sized; hash(tenant_id) for index size; isolate mega-tenants on dedicated shard. Queries must include tenant_id. Cross-tenant reports via warehouse, not scatter-gather OLTP.
+Read from primary after write; return `ETag`/version to client; BFF passes version to list API; or short client poll until visible; or route session to same replica with lag check. Do not read search index for confirmation.
 
 ---
 
-### Q11. Read replica OK for which operations?
+</details>
 
-**Answer.** Browse catalog, dashboards with "as of" disclaimer, analytics. Not OK: stock reservation, balance check, idempotency key lookup after write, uniqueness enforcement.
+<details class="qa-item">
+<summary>6. Explain CQRS without event sourcing.</summary>
 
----
-
-### Q12. Polyglot persistence example for e-commerce.
-
-**Answer.** Orders/payments: PostgreSQL ACID. Session cart: Redis TTL. Search: Elasticsearch projection. Images: S3. Recommendations: feature store. Each owned by one service; sync via events/CDC.
+Separate write model (normalized PG) and read model (denormalized table or ES). Projector syncs via outbox events or CDC. Writes go to command side; queries hit read side. No event store as SoT — current write table still authoritative.
 
 ---
 
-### Q13. Cross-service query: order history with product thumbnails?
+</details>
 
-**Answer.** Denormalize thumbnail URL on order line at purchase time; or CQRS `OrderHistoryView` fed by Order + Catalog events; or BFF batch `GET /products?ids=` with cache. Never 50 sequential product calls.
+<details class="qa-item">
+<summary>7. When would you use event sourcing?</summary>
 
----
-
-### Q14. Zero-downtime schema change steps?
-
-**Answer.** Expand-contract: add nullable column → deploy dual-write → backfill → deploy read new → add NOT NULL → drop old. Use online schema change tools for large tables. Feature flags gate new code paths.
+Audit/legal replay, temporal queries, complex aggregate lifecycle, multiple projections from same history. Avoid for simple CRUD with no audit need — operational cost of schema evolution and GDPR is high.
 
 ---
 
-### Q15. Saga stuck in RUNNING — how to debug?
+</details>
 
-**Answer.** Check last successful step in saga store; consumer lag on next topic; DLQ for failed event; payment gateway webhook delay; step timeout config. Run reconciliation job; manually compensate with audit if needed.
+<details class="qa-item">
+<summary>8. CDC vs application publishing events?</summary>
 
----
-
-### Q16. Distributed lock without fencing — real failure?
-
-**Answer.** Leader pauses (GC), lock expires, new leader works, old leader resumes and writes — duplicate batch payout. Fix: fencing tokens in storage layer or use DB compare-and-swap with version column.
+Application events: rich domain semantics, explicit versioning, only business-meaningful changes. CDC: captures all row changes including admin fixes, bypasses app bugs missing publish, enables legacy integration. Often **both**: domain events via outbox + CDC for analytics replica.
 
 ---
 
-### Q17. How does Debezium affect PostgreSQL primary?
+</details>
 
-**Answer.** Creates logical replication slot; WAL retained until consumed; lag causes disk growth. Monitor slot lag; avoid orphaned slots; `REPLICA IDENTITY FULL` overhead on updates. Plan slot management in connector lifecycle.
+<details class="qa-item">
+<summary>9. How to handle duplicate Kafka messages?</summary>
 
----
-
-### Q18. Eventual consistency acceptable for what business cases?
-
-**Answer.** Search ranking, recommendations, analytics, non-critical notifications. Not acceptable without mitigation: account balance display (use strong read or versioned UI), inventory at checkout (reservation on primary), legal invoice totals (verify before issue).
+Idempotent consumer: `processed_events(event_id)` unique index; business idempotency keys; upsert read models; deterministic handlers. At-least-once + idempotency = effective exactly-once processing.
 
 ---
 
-### Q19. Migrate 500GB orders table to new service DB?
+</details>
 
-**Answer.** CDC or batch backfill with cursor; dual-write period; checksum validation; shadow read compare; gradual traffic shift; keep rollback path until soak complete. Id mapping table for old_id → new_id in events.
+<details class="qa-item">
+<summary>10. Shard key for multi-tenant SaaS?</summary>
 
----
-
-### Q20. TCC vs Saga?
-
-**Answer.** **TCC:** Try-Reserve-Confirm/Cancel — resources reserved in Try phase; Confirm commits reservation. Stronger isolation for inventory/money; more invasive code (three interfaces per service). **Saga:** simpler local TX + compensate; more visible intermediate state. TCC when reservation conflicts are costly; saga for most ecommerce flows.
+`tenant_id` if tenants evenly sized; hash(tenant_id) for index size; isolate mega-tenants on dedicated shard. Queries must include tenant_id. Cross-tenant reports via warehouse, not scatter-gather OLTP.
 
 ---
 
-### Q21. Why is shared database an anti-pattern?
+</details>
 
-**Answer.** Couples schema evolution, scaling, deployment, and ownership. One team's migration blocks others. Violates microservice autonomy. Creates distributed monolith with network hops but same DB failure domain.
+<details class="qa-item">
+<summary>11. Read replica OK for which operations?</summary>
 
----
-
-### Q22. Optimistic locking in distributed updates?
-
-**Answer.** Version column on aggregate; update `WHERE id=? AND version=?`; conflict → retry or return 409. Works within one service DB. Cross-service: use saga + business retry or merge policy — not global row lock.
+Browse catalog, dashboards with "as of" disclaimer, analytics. Not OK: stock reservation, balance check, idempotency key lookup after write, uniqueness enforcement.
 
 ---
 
-### Q23. How to test saga compensations?
+</details>
 
-**Answer.** Integration tests with testcontainers: inject failure after step 2; assert compensation events and final DB state. Chaos on payment provider mock. Property: compensation idempotent when invoked twice.
+<details class="qa-item">
+<summary>12. Polyglot persistence example for e-commerce.</summary>
 
----
-
-### Q24. `REPEATABLE READ` enough for inventory?
-
-**Answer.** Within single DB TX, `SELECT FOR UPDATE` or atomic `UPDATE qty = qty - 1 WHERE qty >= 1` prevents oversell in one service. Cross-service inventory requires reservation saga or central inventory partition — isolation level does not cross network.
+Orders/payments: PostgreSQL ACID. Session cart: Redis TTL. Search: Elasticsearch projection. Images: S3. Recommendations: feature store. Each owned by one service; sync via events/CDC.
 
 ---
 
-### Q25. Compare logical vs physical database per service.
+</details>
 
-**Answer.** **Physical:** separate instance — true blast radius isolation, higher cost. **Logical:** separate schema on shared cluster — cheaper; shared failure domain and noisy neighbor risk. Production microservices often start logical, split physical for hot services.
+<details class="qa-item">
+<summary>13. Cross-service query: order history with product thumbnails?</summary>
 
----
-
-### Q26. Handling ordering in saga with multiple instances?
-
-**Answer.** Partition Kafka by `order_id`; single consumer per partition; or orchestrator serializes steps per saga instance. Outbox relay orders by aggregate. Never parallelize steps that depend on prior commit visibility.
+Denormalize thumbnail URL on order line at purchase time; or CQRS `OrderHistoryView` fed by Order + Catalog events; or BFF batch `GET /products?ids=` with cache. Never 50 sequential product calls.
 
 ---
 
-### Q27. Reconciliation job design?
+</details>
 
-**Answer.** Periodic compare owner DB vs downstream (payment provider API, warehouse). Emit metrics `mismatch_count`; auto-repair idempotent rows; alert on threshold; immutable audit log for manual fixes. Source of truth hierarchy documented.
+<details class="qa-item">
+<summary>14. Zero-downtime schema change steps?</summary>
 
----
-
-### Q28. Can GraphQL solve cross-service consistency?
-
-**Answer.** GraphQL solves **query composition**, not consistency. Federation still hits multiple services with respective consistency models. Mutations should target single service or orchestrated BFF saga — not federated multi-write without design.
+Expand-contract: add nullable column → deploy dual-write → backfill → deploy read new → add NOT NULL → drop old. Use online schema change tools for large tables. Feature flags gate new code paths.
 
 ---
 
-### Q29. Pitfalls of Redis cache-aside for product prices?
+</details>
 
-**Answer.** Invalidation race: DB updated, cache stale until TTL. Thundering herd on expiry. Fix: write-through in catalog service, CDC invalidation, versioned cache keys, short TTL + singleflight on miss.
+<details class="qa-item">
+<summary>15. Saga stuck in RUNNING — how to debug?</summary>
 
----
-
-### Q30. Interview: "Design order + payment + inventory."
-
-**Answer.** Order service owns order (PG + outbox). Saga: create PENDING → reserve inventory (event) → charge payment (event) → confirm or compensate LIFO. Idempotency keys throughout. UI reads saga status. Nightly reconciliation with payment gateway. No 2PC; no shared DB.
+Check last successful step in saga store; consumer lag on next topic; DLQ for failed event; payment gateway webhook delay; step timeout config. Run reconciliation job; manually compensate with audit if needed.
 
 ---
 
-### Q31. What breaks when you add read replica without code change?
+</details>
 
-**Answer.** Application still talks to primary only — no benefit. If driver auto-load-balances reads without lag awareness — stale reads and read-your-writes violations. Must explicitly route queries and define tolerances.
+<details class="qa-item">
+<summary>16. Distributed lock without fencing — real failure?</summary>
 
----
-
-### Q32. Schema migration failed mid-deploy — rollback strategy?
-
-**Answer.** Blue/green or rolling: new code backward compatible with old schema. If migration applied but code rolled back, forward-fix migration (re-add dropped column nullable) rather than restore from backup unless data loss acceptable. Flyway undo rare in prod — prefer expand-contract.
+Leader pauses (GC), lock expires, new leader works, old leader resumes and writes — duplicate batch payout. Fix: fencing tokens in storage layer or use DB compare-and-swap with version column.
 
 ---
 
-### Q33. Event schema evolution — add required field?
+</details>
 
-**Answer.** Never break old consumers: add optional field with default in upcaster; dual-write both formats during transition; consumers handle missing field; remove old format after deprecation window. Schema registry compatibility BACKWARD_TRANSITIVE for consumers.
+<details class="qa-item">
+<summary>17. How does Debezium affect PostgreSQL primary?</summary>
 
----
-
-### Q34. Why monotonic reads matter in account settings page?
-
-**Answer.** User updates email, refreshes, sees old email — believes save failed, retries, creates duplicate tickets. Monotonic reads via primary or session-scoped replica pinning after write.
+Creates logical replication slot; WAL retained until consumed; lag causes disk growth. Monitor slot lag; avoid orphaned slots; `REPLICA IDENTITY FULL` overhead on updates. Plan slot management in connector lifecycle.
 
 ---
 
-### Q35. Split brain after DB failover — data layer?
+</details>
 
-**Answer.** Old primary must be fenced (STONITH, disable VIP). Apps use leader-aware connection string. Writes with **epoch/generation** rejected on stale primary. Test failover quarterly; measure RPO with async rep honestly.
+<details class="qa-item">
+<summary>18. Eventual consistency acceptable for what business cases?</summary>
 
----
-
-### Q36. Is Kafka transactional exactly-once enough for microservices?
-
-**Answer.** Kafka EOS covers producer + consumer within Kafka streams processing. Cross-service exactly-once needs transactional outbox on DB side + idempotent consumers — broker EOS does not commit your PostgreSQL order row atomically with external side effects.
+Search ranking, recommendations, analytics, non-critical notifications. Not acceptable without mitigation: account balance display (use strong read or versioned UI), inventory at checkout (reservation on primary), legal invoice totals (verify before issue).
 
 ---
 
-### Q37. Cross-shard transaction needed for transfer between users?
+</details>
 
-**Answer.** Avoid if possible: redesign so both accounts in same shard (shard by `account_id % N` with consistent routing). If unavoidable: 2PC across shards (Citus, custom) or saga with debit/credit compensations and reconciliation — accept temporary inconsistency window.
+<details class="qa-item">
+<summary>19. Migrate 500GB orders table to new service DB?</summary>
 
----
-
-### Q38. Data ownership dispute in incident — how to resolve?
-
-**Answer.** Consult bounded context map: writer service fixes data. Consumers rebuild projection from events. No direct patch on consumer copy without fixing owner. Postmortem updates ownership registry and on-call routing.
+CDC or batch backfill with cursor; dual-write period; checksum validation; shadow read compare; gradual traffic shift; keep rollback path until soak complete. Id mapping table for old_id → new_id in events.
 
 ---
 
-### Q39. When to use materialized view vs CQRS projection?
+</details>
 
-**Answer.** Materialized view in same DB as write: simpler, same ownership, refresh lag managed by DB. CQRS projection: different store, scale independently, cross-service data via events. Cross-service → CQRS; same-service read optimization → mat view OK.
+<details class="qa-item">
+<summary>20. TCC vs Saga?</summary>
+
+**TCC:** Try-Reserve-Confirm/Cancel — resources reserved in Try phase; Confirm commits reservation. Stronger isolation for inventory/money; more invasive code (three interfaces per service). **Saga:** simpler local TX + compensate; more visible intermediate state. TCC when reservation conflicts are costly; saga for most ecommerce flows.
 
 ---
 
-### Q40. Production metric stack for data consistency?
+</details>
 
-**Answer.** Outbox unpublished count; consumer lag; replication lag; saga RUNNING age; reconciliation mismatch rate; DLQ depth; projection doc count drift; p99 relay latency. Alert on business SLO ("99% orders confirmed < 30s") not only infra metrics.
+<details class="qa-item">
+<summary>21. Why is shared database an anti-pattern?</summary>
+
+Couples schema evolution, scaling, deployment, and ownership. One team's migration blocks others. Violates microservice autonomy. Creates distributed monolith with network hops but same DB failure domain.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>22. Optimistic locking in distributed updates?</summary>
+
+Version column on aggregate; update `WHERE id=? AND version=?`; conflict → retry or return 409. Works within one service DB. Cross-service: use saga + business retry or merge policy — not global row lock.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>23. How to test saga compensations?</summary>
+
+Integration tests with testcontainers: inject failure after step 2; assert compensation events and final DB state. Chaos on payment provider mock. Property: compensation idempotent when invoked twice.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>24. `REPEATABLE READ` enough for inventory?</summary>
+
+Within single DB TX, `SELECT FOR UPDATE` or atomic `UPDATE qty = qty - 1 WHERE qty >= 1` prevents oversell in one service. Cross-service inventory requires reservation saga or central inventory partition — isolation level does not cross network.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>25. Compare logical vs physical database per service.</summary>
+
+**Physical:** separate instance — true blast radius isolation, higher cost. **Logical:** separate schema on shared cluster — cheaper; shared failure domain and noisy neighbor risk. Production microservices often start logical, split physical for hot services.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>26. Handling ordering in saga with multiple instances?</summary>
+
+Partition Kafka by `order_id`; single consumer per partition; or orchestrator serializes steps per saga instance. Outbox relay orders by aggregate. Never parallelize steps that depend on prior commit visibility.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>27. Reconciliation job design?</summary>
+
+Periodic compare owner DB vs downstream (payment provider API, warehouse). Emit metrics `mismatch_count`; auto-repair idempotent rows; alert on threshold; immutable audit log for manual fixes. Source of truth hierarchy documented.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>28. Can GraphQL solve cross-service consistency?</summary>
+
+GraphQL solves **query composition**, not consistency. Federation still hits multiple services with respective consistency models. Mutations should target single service or orchestrated BFF saga — not federated multi-write without design.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>29. Pitfalls of Redis cache-aside for product prices?</summary>
+
+Invalidation race: DB updated, cache stale until TTL. Thundering herd on expiry. Fix: write-through in catalog service, CDC invalidation, versioned cache keys, short TTL + singleflight on miss.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>30. Interview: "Design order + payment + inventory."</summary>
+
+Order service owns order (PG + outbox). Saga: create PENDING → reserve inventory (event) → charge payment (event) → confirm or compensate LIFO. Idempotency keys throughout. UI reads saga status. Nightly reconciliation with payment gateway. No 2PC; no shared DB.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>31. What breaks when you add read replica without code change?</summary>
+
+Application still talks to primary only — no benefit. If driver auto-load-balances reads without lag awareness — stale reads and read-your-writes violations. Must explicitly route queries and define tolerances.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>32. Schema migration failed mid-deploy — rollback strategy?</summary>
+
+Blue/green or rolling: new code backward compatible with old schema. If migration applied but code rolled back, forward-fix migration (re-add dropped column nullable) rather than restore from backup unless data loss acceptable. Flyway undo rare in prod — prefer expand-contract.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>33. Event schema evolution — add required field?</summary>
+
+Never break old consumers: add optional field with default in upcaster; dual-write both formats during transition; consumers handle missing field; remove old format after deprecation window. Schema registry compatibility BACKWARD_TRANSITIVE for consumers.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>34. Why monotonic reads matter in account settings page?</summary>
+
+User updates email, refreshes, sees old email — believes save failed, retries, creates duplicate tickets. Monotonic reads via primary or session-scoped replica pinning after write.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>35. Split brain after DB failover — data layer?</summary>
+
+Old primary must be fenced (STONITH, disable VIP). Apps use leader-aware connection string. Writes with **epoch/generation** rejected on stale primary. Test failover quarterly; measure RPO with async rep honestly.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>36. Is Kafka transactional exactly-once enough for microservices?</summary>
+
+Kafka EOS covers producer + consumer within Kafka streams processing. Cross-service exactly-once needs transactional outbox on DB side + idempotent consumers — broker EOS does not commit your PostgreSQL order row atomically with external side effects.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>37. Cross-shard transaction needed for transfer between users?</summary>
+
+Avoid if possible: redesign so both accounts in same shard (shard by `account_id % N` with consistent routing). If unavoidable: 2PC across shards (Citus, custom) or saga with debit/credit compensations and reconciliation — accept temporary inconsistency window.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>38. Data ownership dispute in incident — how to resolve?</summary>
+
+Consult bounded context map: writer service fixes data. Consumers rebuild projection from events. No direct patch on consumer copy without fixing owner. Postmortem updates ownership registry and on-call routing.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>39. When to use materialized view vs CQRS projection?</summary>
+
+Materialized view in same DB as write: simpler, same ownership, refresh lag managed by DB. CQRS projection: different store, scale independently, cross-service data via events. Cross-service → CQRS; same-service read optimization → mat view OK.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>40. Production metric stack for data consistency?</summary>
+
+Outbox unpublished count; consumer lag; replication lag; saga RUNNING age; reconciliation mismatch rate; DLQ depth; projection doc count drift; p99 relay latency. Alert on business SLO ("99% orders confirmed < 30s") not only infra metrics.
+
+</details>
 
 ---
 

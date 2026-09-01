@@ -29,7 +29,6 @@ Spring Boot 3.x / Kubernetes 1.28+ / OpenTelemetry / Prometheus / incident.io / 
 21. [Spring Boot 3 Production Troubleshooting Integration](#21-spring-boot-3-production-troubleshooting-integration)
 22. [Production Debugging Playbook](#22-production-debugging-playbook)
 23. [Quick Decision Matrix](#23-quick-decision-matrix)
-24. [Interview Q&A](#24-interview-qa)
 
 ---
 
@@ -1459,127 +1458,217 @@ argocd app history payment-api
 
 ---
 
-## 24. Interview Q&A
+## Practice Questions & Answers
 
-### Q1. What is the first thing you do when paged for a production outage?
+<details class="qa-item">
+<summary>1. What is the first thing you do when paged for a production outage?</summary>
 
-**A.** Confirm **real user impact** — SLO burn, synthetic failure, support spike — not just an infra alert. Declare an incident if thresholds warrant, assign an IC, and **scope** blast radius (region, tenant, feature). Check **recent changes** in the last two hours. **Mitigate** (rollback, flag off, scale) before deep RCA if user harm is active. Communicate user-visible status, not internal metrics.
+Confirm **real user impact** — SLO burn, synthetic failure, support spike — not just an infra alert. Declare an incident if thresholds warrant, assign an IC, and **scope** blast radius (region, tenant, feature). Check **recent changes** in the last two hours. **Mitigate** (rollback, flag off, scale) before deep RCA if user harm is active. Communicate user-visible status, not internal metrics.
 
-### Q2. How do you debug an intermittent production issue?
+</details>
 
-**A.** Intermittent issues need **aggregation** — metric rates over time, trace sampling with tail sampling for errors, and **correlation IDs** from support tickets. Avoid random `kubectl logs`. Compare failing vs successful traces. Look for race conditions, pool exhaustion under peak, retry timing, and dependency blips. Reproduce with load test in staging with similar concurrency. Enable targeted DEBUG on a canary with time-bounded window.
+<details class="qa-item">
+<summary>2. How do you debug an intermittent production issue?</summary>
 
-### Q3. What is the difference between mitigation and root cause fix?
+Intermittent issues need **aggregation** — metric rates over time, trace sampling with tail sampling for errors, and **correlation IDs** from support tickets. Avoid random `kubectl logs`. Compare failing vs successful traces. Look for race conditions, pool exhaustion under peak, retry timing, and dependency blips. Reproduce with load test in staging with similar concurrency. Enable targeted DEBUG on a canary with time-bounded window.
 
-**A.** **Mitigation** reduces user impact quickly — rollback, disable feature, scale, circuit breaker, load shed — may not address underlying bug. **Root cause fix** prevents recurrence — code fix, migration, architecture change, new alert. During SEV1, mitigate first; root cause can follow after SLI restores. Confusing them leads to "resolved" while still broken or untested hotfixes extending outages.
+</details>
 
-### Q4. How do you perform root cause analysis?
+<details class="qa-item">
+<summary>3. What is the difference between mitigation and root cause fix?</summary>
 
-**A.** Reconstruct a **timeline** from metrics and deploy logs (UTC). Identify **root cause** (enabling condition) vs **contributing factors** (detection delay, retry storm). Use five whys or fishbone for systemic view — avoid stopping at "human error." Produce blameless postmortem with action items: **prevent** (code/test), **detect** (alert), **mitigate** (runbook). Verify action items close — otherwise RCA is theater.
+**Mitigation** reduces user impact quickly — rollback, disable feature, scale, circuit breaker, load shed — may not address underlying bug. **Root cause fix** prevents recurrence — code fix, migration, architecture change, new alert. During SEV1, mitigate first; root cause can follow after SLI restores. Confusing them leads to "resolved" while still broken or untested hotfixes extending outages.
 
-### Q5. What roles exist in incident management and why?
+</details>
 
-**A.** **Incident Commander** coordinates priorities and decisions without deep-diving. **Technical Lead** drives hypothesis tree and engineering. **Communications Lead** owns status page and support macros. **Scribe** maintains timeline. **Domain experts** join as needed. Separation prevents nobody owning customer comms and five engineers rolling back different things simultaneously.
+<details class="qa-item">
+<summary>4. How do you perform root cause analysis?</summary>
 
-### Q6. How do you debug a distributed microservices failure?
+Reconstruct a **timeline** from metrics and deploy logs (UTC). Identify **root cause** (enabling condition) vs **contributing factors** (detection delay, retry storm). Use five whys or fishbone for systemic view — avoid stopping at "human error." Produce blameless postmortem with action items: **prevent** (code/test), **detect** (alert), **mitigate** (runbook). Verify action items close — otherwise RCA is theater.
 
-**A.** Start at **user journey SLI** and edge metrics. Find first service with RED anomaly on critical path. Use **distributed traces** with W3C propagation and **correlation IDs** across HTTP and Kafka. Check outbound dependency RED. Compare deploy timeline across all services in path — not only the entry service. Account for **partial failure**, async completion, and eventual consistency — absence of error metric does not mean correct behavior.
+</details>
 
-### Q7. What is a correlation ID and how do you use it in incidents?
+<details class="qa-item">
+<summary>5. What roles exist in incident management and why?</summary>
 
-**A.** Business-scoped identifier generated at edge, propagated through services, returned to client (`X-Correlation-Id`). Support tickets include it. Search logs and sometimes events by this ID to find exact request path. Distinct from `trace_id` (telemetry, may be unsampled). Both should propagate; correlation ID bridges support and engineering during incidents.
+**Incident Commander** coordinates priorities and decisions without deep-diving. **Technical Lead** drives hypothesis tree and engineering. **Communications Lead** owns status page and support macros. **Scribe** maintains timeline. **Domain experts** join as needed. Separation prevents nobody owning customer comms and five engineers rolling back different things simultaneously.
 
-### Q8. How do you find performance bottlenecks in production?
+</details>
 
-**A.** Identify constraint using **USE** (pools, CPU throttle, disk) and **RED** (which span in trace is longest). Scaling pods helps only if bottleneck is app CPU and not shared serial resource (DB primary). Check connection pool pending, slow queries (`pg_stat_statements`), N+1 in traces (many jdbc spans), cache miss storms, GC pauses, and cross-region RTT. Little's Law: growing queue with stable RPS means increased service time — find what slowed.
+<details class="qa-item">
+<summary>6. How do you debug a distributed microservices failure?</summary>
 
-### Q9. What are common database-related production performance issues?
+Start at **user journey SLI** and edge metrics. Find first service with RED anomaly on critical path. Use **distributed traces** with W3C propagation and **correlation IDs** across HTTP and Kafka. Check outbound dependency RED. Compare deploy timeline across all services in path — not only the entry service. Account for **partial failure**, async completion, and eventual consistency — absence of error metric does not mean correct behavior.
 
-**A.** Missing indexes, N+1 ORM queries, connection pool too large × many pods exceeding DB `max_connections`, long transactions holding locks, migrations locking hot tables, reading OLTP primary for reports, connection leaks on error paths, and stale statistics causing bad plans. Debug with trace jdbc spans, Hikari metrics, `pg_stat_statements`, and `EXPLAIN` on replica.
+</details>
 
-### Q10. How do connection pools cause outages?
+<details class="qa-item">
+<summary>7. What is a correlation ID and how do you use it in incidents?</summary>
 
-**A.** Pool too small → pending acquires and timeouts under load. Pool too large × pod count → DB overwhelmed with connections. **Leaks** on exception paths never release connections → gradual exhaustion. Slow queries hold connections longer → effective pool shrink. Alert on `pending` and mean acquire time. Fix leaks, tune pool size, optimize queries, use replicas for read load.
+Business-scoped identifier generated at edge, propagated through services, returned to client (`X-Correlation-Id`). Support tickets include it. Search logs and sometimes events by this ID to find exact request path. Distinct from `trace_id` (telemetry, may be unsampled). Both should propagate; correlation ID bridges support and engineering during incidents.
 
-### Q11. What is a retry storm and how do you detect it?
+</details>
 
-**A.** Clients retry failed calls aggressively — often after dependency recovers — multiplying traffic (e.g. 50 pods × 5 retries). Detect: spike in RPS to dependency while errors elevated; trace shows repeated retry spans; dependency recovers then crashes again. Fix: exponential backoff with jitter, cap retries, retry only idempotent ops, circuit breaker, coordinate retry budgets across services and mesh.
+<details class="qa-item">
+<summary>8. How do you find performance bottlenecks in production?</summary>
 
-### Q12. How do you debug Kafka consumer lag?
+Identify constraint using **USE** (pools, CPU throttle, disk) and **RED** (which span in trace is longest). Scaling pods helps only if bottleneck is app CPU and not shared serial resource (DB primary). Check connection pool pending, slow queries (`pg_stat_statements`), N+1 in traces (many jdbc spans), cache miss storms, GC pauses, and cross-region RTT. Little's Law: growing queue with stable RPS means increased service time — find what slowed.
 
-**A.** Check `consumer_group_lag` metric and consumer pod restarts. High lag + low CPU → poison message or blocked handler (DB lock). High lag + high CPU → slow processing or under-provisioned consumers. Zero lag but wrong outcomes → logic bug, wrong topic, serde mismatch. Inspect DLQ, deserialization errors in logs, partition skew (hot partition). Propagate trace context in headers for cross-service debug.
+</details>
 
-### Q13. What is cache stampede and how do you prevent it?
+<details class="qa-item">
+<summary>9. What are common database-related production performance issues?</summary>
 
-**A.** Many requests miss cache simultaneously (e.g. shared TTL expiry) and hammer backing store. Prevent: **TTL jitter**, probabilistic early expiration, **singleflight** (one fetch per key), pre-warm before known traffic spikes, circuit to DB on overload. Symptom: DB spike with high cache hit rate moments before.
+Missing indexes, N+1 ORM queries, connection pool too large × many pods exceeding DB `max_connections`, long transactions holding locks, migrations locking hot tables, reading OLTP primary for reports, connection leaks on error paths, and stale statistics causing bad plans. Debug with trace jdbc spans, Hikari metrics, `pg_stat_statements`, and `EXPLAIN` on replica.
 
-### Q14. How do you troubleshoot multi-tenant issues in production?
+</details>
 
-**A.** Early question: **one tenant or all?** If one — noisy neighbor, wrong shard, tenant-specific config/flag, quota exceeded. Verify `tenant_id` in JWT matches data access logs. Metrics with per-tenant labels only for bounded VIP set — else use logs. Check cache keys include tenant. For cross-tenant leak — SEV1: disable endpoint, audit query, security incident process.
+<details class="qa-item">
+<summary>10. How do connection pools cause outages?</summary>
 
-### Q15. What causes cross-tenant data leaks and how do you prevent them?
+Pool too small → pending acquires and timeouts under load. Pool too large × pod count → DB overwhelmed with connections. **Leaks** on exception paths never release connections → gradual exhaustion. Slow queries hold connections longer → effective pool shrink. Alert on `pending` and mean acquire time. Fix leaks, tune pool size, optimize queries, use replicas for read load.
 
-**A.** Missing `tenant_id` predicate in SQL/repository, cache key without tenant prefix, search index without routing, batch job without tenant scope, admin tool bypassing checks. Prevent: centralized tenant-scoped repository layer, ArchUnit tests, automated "tenant escape" integration tests per endpoint, audit logs comparing actor vs resource tenant, code review checklist for any new data access path.
+</details>
 
-### Q16. What is data residency and how does it affect troubleshooting?
+<details class="qa-item">
+<summary>11. What is a retry storm and how do you detect it?</summary>
 
-**A.** Data must be stored/processed in specific jurisdictions. Troubleshooting must use **region-appropriate** logs, DB replicas, and dumps — US engineer may not freely query EU PII. Misconfigured log routing can cause **compliance SEV1** without user-visible outage. DR failover may be **legally blocked** across borders — playbook must document per-tenant residency policy. Break-glass access is audited and time-bound.
+Clients retry failed calls aggressively — often after dependency recovers — multiplying traffic (e.g. 50 pods × 5 retries). Detect: spike in RPS to dependency while errors elevated; trace shows repeated retry spans; dependency recovers then crashes again. Fix: exponential backoff with jitter, cap retries, retry only idempotent ops, circuit breaker, coordinate retry budgets across services and mesh.
 
-### Q17. How do you handle a suspected GDPR data residency violation?
+</details>
 
-**A.** Treat as **SEV1 compliance** — involve legal immediately (72h breach assessment clock may apply). Stop data flow (fix shipper/routing), identify scope (which tenants, time window, data types), delete wrongly indexed data per retention playbook, preserve evidence for legal, customer notification per counsel guidance. Technical fix alone insufficient without legal process.
+<details class="qa-item">
+<summary>12. How do you debug Kafka consumer lag?</summary>
 
-### Q18. How do geo-routing mistakes manifest?
+Check `consumer_group_lag` metric and consumer pod restarts. High lag + low CPU → poison message or blocked handler (DB lock). High lag + high CPU → slow processing or under-provisioned consumers. Zero lag but wrong outcomes → logic bug, wrong topic, serde mismatch. Inspect DLQ, deserialization errors in logs, partition skew (hot partition). Propagate trace context in headers for cross-service debug.
 
-**A.** Users in EU hitting US cluster — high latency and wrong residency. Debug: synthetic probes from EU, DNS geo responses, CDN/LB logs with `client_country`, tenant shard map vs actual cell. Failover runbooks must respect residency — cannot route EU tenants to US for convenience.
+</details>
 
-### Q19. When do you take a heap dump in production?
+<details class="qa-item">
+<summary>13. What is cache stampede and how do you prevent it?</summary>
 
-**A.** Last resort for **OOM** or confirmed memory leak after metrics show growth and GC ineffective — **one canary pod**, not fleet. Heap dumps contain PII — region-locked encrypted storage, delete after analysis, restricted access. Prefer allocation profiling on canary first. Never during active SEV1 unless leak is cause and rollback insufficient.
+Many requests miss cache simultaneously (e.g. shared TTL expiry) and hammer backing store. Prevent: **TTL jitter**, probabilistic early expiration, **singleflight** (one fetch per key), pre-warm before known traffic spikes, circuit to DB on overload. Symptom: DB spike with high cache hit rate moments before.
 
-### Q20. What is the difference between liveness and readiness in incident response?
+</details>
 
-**A.** **Readiness** — should receive traffic; fail when dependencies down so load balancer routes away. **Liveness** — process alive; failure restarts pod. Misconfigured liveness during dependency outage kills pods repeatedly — **worsens incident**. During debug, NotReady is signal; CrashLoop from liveness is often misconfiguration. Alert on user SLI, not kube Ready alone.
+<details class="qa-item">
+<summary>14. How do you troubleshoot multi-tenant issues in production?</summary>
 
-### Q21. How do you write a good postmortem?
+Early question: **one tenant or all?** If one — noisy neighbor, wrong shard, tenant-specific config/flag, quota exceeded. Verify `tenant_id` in JWT matches data access logs. Metrics with per-tenant labels only for bounded VIP set — else use logs. Check cache keys include tenant. For cross-tenant leak — SEV1: disable endpoint, audit query, security incident process.
 
-**A.** Blameless, factual timeline (UTC), clear impact (users, duration, SLO budget), root cause vs contributing factors, what went well/poorly, and **tracked action items** with owners and dates — prevent, detect, mitigate categories. Avoid vague "improve monitoring." Review in reliability meeting until items close. Share learnings org-wide for similar services.
+</details>
 
-### Q22. How do you decide rollback vs fix-forward?
+<details class="qa-item">
+<summary>15. What causes cross-tenant data leaks and how do you prevent them?</summary>
 
-**A.** **Rollback** when cause unknown, revert path fast and safe, data migration irreversible, or SEV1 active. **Fix-forward** when root cause clear, small tested patch, rollback risky (schema), or fix is faster than revert. IC decides with TL input — not lone engineer during incident. Fix-forward in SEV1 without load test often extends outage.
+Missing `tenant_id` predicate in SQL/repository, cache key without tenant prefix, search index without routing, batch job without tenant scope, admin tool bypassing checks. Prevent: centralized tenant-scoped repository layer, ArchUnit tests, automated "tenant escape" integration tests per endpoint, audit logs comparing actor vs resource tenant, code review checklist for any new data access path.
 
-### Q23. What metrics do you check first for latency regression?
+</details>
 
-**A.** p99 **per route** and per critical path — not global average. Trace exemplars on slow requests — longest span name. Outbound client duration metrics. Pool pending, thread queue depth, GC pause metrics, `container_cpu_cfs_throttled_seconds_total`. Compare canary vs stable if gradual rollout. Deploy and flag correlation timestamp.
+<details class="qa-item">
+<summary>16. What is data residency and how does it affect troubleshooting?</summary>
 
-### Q24. How does eventual consistency affect troubleshooting?
+Data must be stored/processed in specific jurisdictions. Troubleshooting must use **region-appropriate** logs, DB replicas, and dumps — US engineer may not freely query EU PII. Misconfigured log routing can cause **compliance SEV1** without user-visible outage. DR failover may be **legally blocked** across borders — playbook must document per-tenant residency policy. Break-glass access is audited and time-bound.
 
-**A.** User may see temporary inconsistent state — payment succeeded, order pending — without error metrics. Debug async path: event in outbox/Kafka by correlation ID, consumer lag, idempotency handling, DLQ. Define **SLA for consistency** — if within SLA, educate support; if event lost, bug in async pipeline. Sync path traces insufficient — must inspect message flow.
+</details>
 
-### Q25. What is alert fatigue and how do you reduce it during on-call?
+<details class="qa-item">
+<summary>17. How do you handle a suspected GDPR data residency violation?</summary>
 
-**A.** Too many low-signal pages — pod restarts, CPU, log patterns — causing missed real outages. Page on **SLO burn** and synthetic business checks. Use inhibition (node → pod), severity tiers, `for:` durations, and runbook-linked annotations. Quarterly alert audit: delete alerts that never led to action. Incident declaration thresholds automated from SLO policy.
+Treat as **SEV1 compliance** — involve legal immediately (72h breach assessment clock may apply). Stop data flow (fix shipper/routing), identify scope (which tenants, time window, data types), delete wrongly indexed data per retention playbook, preserve evidence for legal, customer notification per counsel guidance. Technical fix alone insufficient without legal process.
 
-### Q26. How do you debug CPU high in JVM microservices?
+</details>
 
-**A.** Check **CPU throttling** first — cgroup limit vs JVM view. async-profiler or thread dump on canary — hot methods, infinite loops, excessive GC. Compare traffic RPS — legitimate load vs attack. Recent deploy diff. Reactive stack: blocking on event loop shows as widespread latency with one bad filter. Scale only if CPU-bound and not throttled.
+<details class="qa-item">
+<summary>18. How do geo-routing mistakes manifest?</summary>
 
-### Q27. What is a hypothesis tree in incident response?
+Users in EU hitting US cluster — high latency and wrong residency. Debug: synthetic probes from EU, DNS geo responses, CDN/LB logs with `client_country`, tenant shard map vs actual cell. Failover runbooks must respect residency — cannot route EU tenants to US for convenience.
 
-**A.** Structured branching of possible causes updated live during incident — e.g. checkout 5xx → deploy? dependency? region? tenant? Prevents five engineers investigating the same path. IC/TL maintains in war room doc. Mark branches eliminated with evidence. Guides parallel workstreams on independent branches.
+</details>
 
-### Q28. How do feature flags help in production incidents?
+<details class="qa-item">
+<summary>19. When do you take a heap dump in production?</summary>
 
-**A.** **Kill switches** disable risky paths without full rollback — faster if flag tested quarterly. Scope flags per tenant for isolating bad config. Flags must default safe (new rail off). Document flag names in runbooks. After incident, avoid leaving incident flags on — debt causes next mystery behavior.
+Last resort for **OOM** or confirmed memory leak after metrics show growth and GC ineffective — **one canary pod**, not fleet. Heap dumps contain PII — region-locked encrypted storage, delete after analysis, restricted access. Prefer allocation profiling on canary first. Never during active SEV1 unless leak is cause and rollback insufficient.
 
-### Q29. What is noisy neighbor in multi-tenant SaaS?
+</details>
 
-**A.** One tenant's workload degrades others on shared infrastructure — bulk API import, huge report, load test on shared cell. Detect: per-tenant latency skew while global metrics normal. Mitigate: throttle tenant, move to dedicated cell/shard, rate limits, bulkhead pools. Long-term: cell-based architecture for enterprise tier.
+<details class="qa-item">
+<summary>20. What is the difference between liveness and readiness in incident response?</summary>
 
-### Q30. How do you verify an incident is truly resolved?
+**Readiness** — should receive traffic; fail when dependencies down so load balancer routes away. **Liveness** — process alive; failure restarts pod. Misconfigured liveness during dependency outage kills pods repeatedly — **worsens incident**. During debug, NotReady is signal; CrashLoop from liveness is often misconfiguration. Alert on user SLI, not kube Ready alone.
 
-**A.** User **SLI** restored for 15+ minutes — checkout success rate, synthetic probes pass in affected regions, support macro confirms ticket pattern stopped. Not merely deploy complete or error rate "lower than peak." IC signs off. Continue monitoring for retry storms and cache stampede on recovery. Communicate resolved on status page with brief impact summary.
+</details>
+
+<details class="qa-item">
+<summary>21. How do you write a good postmortem?</summary>
+
+Blameless, factual timeline (UTC), clear impact (users, duration, SLO budget), root cause vs contributing factors, what went well/poorly, and **tracked action items** with owners and dates — prevent, detect, mitigate categories. Avoid vague "improve monitoring." Review in reliability meeting until items close. Share learnings org-wide for similar services.
+
+</details>
+
+<details class="qa-item">
+<summary>22. How do you decide rollback vs fix-forward?</summary>
+
+**Rollback** when cause unknown, revert path fast and safe, data migration irreversible, or SEV1 active. **Fix-forward** when root cause clear, small tested patch, rollback risky (schema), or fix is faster than revert. IC decides with TL input — not lone engineer during incident. Fix-forward in SEV1 without load test often extends outage.
+
+</details>
+
+<details class="qa-item">
+<summary>23. What metrics do you check first for latency regression?</summary>
+
+p99 **per route** and per critical path — not global average. Trace exemplars on slow requests — longest span name. Outbound client duration metrics. Pool pending, thread queue depth, GC pause metrics, `container_cpu_cfs_throttled_seconds_total`. Compare canary vs stable if gradual rollout. Deploy and flag correlation timestamp.
+
+</details>
+
+<details class="qa-item">
+<summary>24. How does eventual consistency affect troubleshooting?</summary>
+
+User may see temporary inconsistent state — payment succeeded, order pending — without error metrics. Debug async path: event in outbox/Kafka by correlation ID, consumer lag, idempotency handling, DLQ. Define **SLA for consistency** — if within SLA, educate support; if event lost, bug in async pipeline. Sync path traces insufficient — must inspect message flow.
+
+</details>
+
+<details class="qa-item">
+<summary>25. What is alert fatigue and how do you reduce it during on-call?</summary>
+
+Too many low-signal pages — pod restarts, CPU, log patterns — causing missed real outages. Page on **SLO burn** and synthetic business checks. Use inhibition (node → pod), severity tiers, `for:` durations, and runbook-linked annotations. Quarterly alert audit: delete alerts that never led to action. Incident declaration thresholds automated from SLO policy.
+
+</details>
+
+<details class="qa-item">
+<summary>26. How do you debug CPU high in JVM microservices?</summary>
+
+Check **CPU throttling** first — cgroup limit vs JVM view. async-profiler or thread dump on canary — hot methods, infinite loops, excessive GC. Compare traffic RPS — legitimate load vs attack. Recent deploy diff. Reactive stack: blocking on event loop shows as widespread latency with one bad filter. Scale only if CPU-bound and not throttled.
+
+</details>
+
+<details class="qa-item">
+<summary>27. What is a hypothesis tree in incident response?</summary>
+
+Structured branching of possible causes updated live during incident — e.g. checkout 5xx → deploy? dependency? region? tenant? Prevents five engineers investigating the same path. IC/TL maintains in war room doc. Mark branches eliminated with evidence. Guides parallel workstreams on independent branches.
+
+</details>
+
+<details class="qa-item">
+<summary>28. How do feature flags help in production incidents?</summary>
+
+**Kill switches** disable risky paths without full rollback — faster if flag tested quarterly. Scope flags per tenant for isolating bad config. Flags must default safe (new rail off). Document flag names in runbooks. After incident, avoid leaving incident flags on — debt causes next mystery behavior.
+
+</details>
+
+<details class="qa-item">
+<summary>29. What is noisy neighbor in multi-tenant SaaS?</summary>
+
+One tenant's workload degrades others on shared infrastructure — bulk API import, huge report, load test on shared cell. Detect: per-tenant latency skew while global metrics normal. Mitigate: throttle tenant, move to dedicated cell/shard, rate limits, bulkhead pools. Long-term: cell-based architecture for enterprise tier.
+
+</details>
+
+<details class="qa-item">
+<summary>30. How do you verify an incident is truly resolved?</summary>
+
+User **SLI** restored for 15+ minutes — checkout success rate, synthetic probes pass in affected regions, support macro confirms ticket pattern stopped. Not merely deploy complete or error rate "lower than peak." IC signs off. Continue monitoring for retry storms and cache stampede on recovery. Communicate resolved on status page with brief impact summary.
+
+</details>
 
 ---
 

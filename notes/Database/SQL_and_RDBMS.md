@@ -11,32 +11,31 @@ PostgreSQL 15+ / MySQL 8.x (InnoDB). This is not a getting-started guide. It is 
 3. [Normalization (1NF–3NF) & When to Denormalize](#3-normalization-1nf3nf-when-to-denormalize)
 4. [SQL DDL: Schemas, Types, Constraints, Migrations](#4-sql-ddl-schemas-types-constraints-migrations)
 5. [SQL DML: INSERT, UPDATE, DELETE, UPSERT](#5-sql-dml-insert-update-delete-upsert)
-6. [Joins: Inner, Outer, Cross, Self — Semantics That Matter](#6-joins-inner-outer-cross-self-semantics-that-matter)
-7. [Subqueries, CTEs, and Correlated Queries](#7-subqueries-ctes-and-correlated-queries)
-8. [Aggregates, GROUP BY, HAVING, and DISTINCT Pitfalls](#8-aggregates-group-by-having-and-distinct-pitfalls)
-9. [Window Functions: Ranking, Frames, and Production Patterns](#9-window-functions-ranking-frames-and-production-patterns)
-10. [Indexes: B-tree, Composite, Covering, Partial](#10-indexes-b-tree-composite-covering-partial)
-11. [EXPLAIN / ANALYZE & Reading Execution Plans](#11-explain-analyze-reading-execution-plans)
-12. [Query Optimization Playbook](#12-query-optimization-playbook)
-13. [Transactions & ACID — What the Database Actually Guarantees](#13-transactions-acid-what-the-database-actually-guarantees)
-14. [Isolation Levels: READ UNCOMMITTED Through SERIALIZABLE](#14-isolation-levels-read-uncommitted-through-serializable)
-15. [MVCC: PostgreSQL vs MySQL InnoDB](#15-mvcc-postgresql-vs-mysql-innodb)
-16. [Locking: Row, Table, Gap, Next-Key](#16-locking-row-table-gap-next-key)
-17. [Deadlocks: Detection, Prevention, Recovery](#17-deadlocks-detection-prevention-recovery)
-18. [Connection Pooling Math: max_connections vs App Pods](#18-connection-pooling-math-max_connections-vs-app-pods)
-19. [Read Replicas & Replication Lag](#19-read-replicas-replication-lag)
-20. [Partitioning & Sharding Basics](#20-partitioning-sharding-basics)
-21. [Stored Procedures: When / When Not](#21-stored-procedures-when-when-not)
-22. [Flyway / Liquibase Migration Safety](#22-flyway-liquibase-migration-safety)
-23. [Production Scenarios: Slow Query, Missing Index, Lock Wait, Replica Lag](#23-production-scenarios-slow-query-missing-index-lock-wait-replica-lag)
-24. [Production Debugging Playbook](#24-production-debugging-playbook)
-25. [Quick Decision Matrix](#25-quick-decision-matrix)
-26. [Scenario-Based Questions](#26-scenario-based-questions)
-27. [Appendix A: Set Operations & NULL Semantics](#appendix-a-set-operations-null-semantics)
-28. [Appendix B: Monitoring Queries (Copy-Paste Starters)](#appendix-b-monitoring-queries-copy-paste-starters)
-29. [Appendix C: Isolation Level Cheat Sheet (Engine Behavior)](#appendix-c-isolation-level-cheat-sheet-engine-behavior)
+6. [Bulk Data Loading: COPY, LOAD DATA, JDBC Batch, Upsert at Scale](#6-bulk-data-loading-copy-load-data-jdbc-batch-upsert-at-scale)
+7. [Joins: Inner, Outer, Cross, Self — Semantics That Matter](#7-joins-inner-outer-cross-self-semantics-that-matter)
+8. [Subqueries, CTEs, and Correlated Queries](#8-subqueries-ctes-and-correlated-queries)
+9. [Aggregates, GROUP BY, HAVING, and DISTINCT Pitfalls](#9-aggregates-group-by-having-and-distinct-pitfalls)
+10. [Window Functions: Ranking, Frames, and Production Patterns](#10-window-functions-ranking-frames-and-production-patterns)
+11. [Indexes: B-tree, Composite, Covering, Partial](#11-indexes-b-tree-composite-covering-partial)
+12. [Index Internals: B+Tree Layout, Clustering, and Physical Cost](#12-index-internals-btree-layout-clustering-and-physical-cost)
+13. [EXPLAIN / ANALYZE & Reading Execution Plans](#13-explain-analyze-reading-execution-plans)
+14. [Query Optimization Playbook](#14-query-optimization-playbook)
+15. [Transactions & ACID — What the Database Actually Guarantees](#15-transactions-acid-what-the-database-actually-guarantees)
+16. [Isolation Levels: READ UNCOMMITTED Through SERIALIZABLE](#16-isolation-levels-read-uncommitted-through-serializable)
+17. [MVCC: PostgreSQL vs MySQL InnoDB](#17-mvcc-postgresql-vs-mysql-innodb)
+18. [Locking: Row, Table, Gap, Next-Key](#18-locking-row-table-gap-next-key)
+19. [Deadlocks: Detection, Prevention, Recovery](#19-deadlocks-detection-prevention-recovery)
+20. [Connection Pooling Math: max_connections vs App Pods](#20-connection-pooling-math-max_connections-vs-app-pods)
+21. [Read Replicas & Replication Lag](#21-read-replicas-replication-lag)
+22. [Partitioning & Sharding Basics](#22-partitioning-sharding-basics)
+23. [Stored Procedures: When / When Not](#23-stored-procedures-when-when-not)
+24. [Flyway / Liquibase Migration Safety](#24-flyway-liquibase-migration-safety)
+25. [Production Scenarios: Slow Query, Missing Index, Lock Wait, Replica Lag](#25-production-scenarios-slow-query-missing-index-lock-wait-replica-lag)
+26. [Production Debugging Playbook](#26-production-debugging-playbook)
+27. [Quick Decision Matrix](#27-quick-decision-matrix)
 
 ---
+
 
 ## 1. Mental Model: One Query Through the Engine
 
@@ -293,7 +292,365 @@ WHERE created_at < now() - interval '90 days'
 
 ---
 
-## 6. Joins: Inner, Outer, Cross, Self — Semantics That Matter
+## 6. Bulk Data Loading: COPY, LOAD DATA, JDBC Batch, Upsert at Scale
+
+### Core concept
+
+Loading 50 million rows is not "the same INSERT, more times." Per-row cost is dominated by things that have nothing to do with writing the row: a network round trip, statement parse + plan, a WAL/redo record, index maintenance on every index, constraint checks, and a commit fsync. Bulk loading is the discipline of **amortizing or deleting each of those costs**.
+
+The cost stack for one naive `INSERT` executed in autocommit:
+
+```
+INSERT INTO events (...) VALUES (...);
+  ├─ network RTT              ~0.2–1.0 ms  (same AZ; 10ms cross-region)
+  ├─ parse + plan             ~0.05 ms     (unless prepared/cached)
+  ├─ heap/clustered write     ~0.01 ms     (buffer pool, cheap)
+  ├─ index maintenance        ~0.02 ms × number_of_indexes
+  ├─ WAL / redo record        ~0.01 ms
+  └─ COMMIT fsync             ~0.5–5 ms    ← the killer, once PER ROW
+```
+
+At 1 ms RTT + 1 ms fsync, the theoretical ceiling is **~500 rows/sec per connection** no matter how fast the disk is. That is why an import "works fine locally" (unix socket, `fsync=off` dev config) and takes 14 hours in production.
+
+### The ladder of loading techniques
+
+| Technique | Round trips for 1M rows | Typical throughput (PG 15, 8 vCPU, gp3, 3 indexes) | When |
+|---|---|---|---|
+| Single-row `INSERT`, autocommit | 1,000,000 | 400–800 rows/s | Never for bulk |
+| Single-row `INSERT`, one transaction | 1,000,000 | 3k–8k rows/s | Still round-trip bound |
+| Multi-row `INSERT` (1000 values) | 1,000 | 40k–80k rows/s | Portable, easy, good enough |
+| JDBC `addBatch` **without** rewrite flag | 1,000,000 (!) | 3k–8k rows/s | The silent trap |
+| JDBC `addBatch` **with** rewrite flag | ~1,000 | 40k–90k rows/s | Default for app-driven loads |
+| `COPY ... FROM STDIN` (PG) | streaming | 150k–400k rows/s | Fastest portable-ish path |
+| `COPY` into `UNLOGGED` table, no indexes | streaming | 400k–1M rows/s | Staging/ETL only |
+| `LOAD DATA INFILE` (MySQL) | streaming | 100k–300k rows/s | MySQL equivalent of COPY |
+
+Numbers are order-of-magnitude, not benchmarks. The **ratios** are the point: COPY is roughly 100× a naive loop, and 4–8× a well-batched INSERT.
+
+### PostgreSQL: `COPY`
+
+```sql
+-- Server-side COPY: file must be readable by the postgres OS user (superuser / pg_read_server_files)
+COPY events (occurred_at, user_id, kind, payload)
+FROM '/var/lib/postgresql/import/events.csv'
+WITH (FORMAT csv, HEADER true, DELIMITER ',', NULL '');
+
+-- Client-side \copy in psql: streams over the existing connection, no server file access needed
+\copy events (occurred_at, user_id, kind, payload) FROM './events.csv' WITH (FORMAT csv, HEADER true)
+
+-- Pipe from another process (no intermediate file at all)
+-- psql -c "\copy events FROM PROGRAM 'zcat /tmp/events.csv.gz' WITH (FORMAT csv)"
+```
+
+From Java, use the driver's `CopyManager` — it is dramatically faster than any batch API:
+
+```java
+public long copyEvents(Connection conn, Reader csv) throws Exception {
+    PGConnection pg = conn.unwrap(PGConnection.class);
+    CopyManager copyManager = pg.getCopyAPI();
+    return copyManager.copyIn(
+        "COPY events (occurred_at, user_id, kind, payload) FROM STDIN WITH (FORMAT csv)",
+        csv,
+        1 << 16);   // 64 KB buffer; small buffers re-introduce round trips
+}
+```
+
+`COPY` skips per-row statement planning entirely, writes rows in page-fill order, and (in PG 14+) can use a single WAL record for multiple tuples on the same page. It still fires triggers, still checks constraints, still maintains indexes — those are the costs you remove separately.
+
+### MySQL: `LOAD DATA INFILE`
+
+```sql
+-- Server-side: file on the DB host, path must be under secure_file_priv
+LOAD DATA INFILE '/var/lib/mysql-files/events.csv'
+INTO TABLE events
+FIELDS TERMINATED BY ',' OPTIONALLY ENCLOSED BY '"'
+LINES TERMINATED BY '\n'
+IGNORE 1 LINES
+(@occurred_at, user_id, kind, payload)
+SET occurred_at = STR_TO_DATE(@occurred_at, '%Y-%m-%d %H:%i:%s');
+
+-- Client-side: requires local_infile=1 on BOTH server and client/JDBC URL
+LOAD DATA LOCAL INFILE './events.csv' INTO TABLE events ...;
+```
+
+JDBC: `?allowLoadLocalInfile=true` (MySQL Connector/J 8.0.31+; older drivers used `allowLoadLocalInfileInPath`). This is a deliberate security gate — a malicious server can otherwise ask the client to upload arbitrary local files. Enable it narrowly, on the import job's datasource only, never on the API datasource.
+
+### JDBC batching — and the two flags that decide everything
+
+The single most expensive misunderstanding in Java data loading: `addBatch()` / `executeBatch()` **does not** by itself produce one multi-row statement. By default both major drivers still send N statements — they just pipeline them, saving a little latency, not the parse/execute cost.
+
+| Driver | Flag | What it does |
+|---|---|---|
+| MySQL Connector/J | `rewriteBatchedStatements=true` | Rewrites N `INSERT INTO t VALUES (…)` into one `INSERT INTO t VALUES (…),(…),(…)` |
+| PostgreSQL JDBC | `reWriteBatchedInserts=true` | Same rewrite for simple `INSERT … VALUES (?, ?)` batches |
+
+```
+jdbc:mysql://db:3306/app?rewriteBatchedStatements=true&useServerPrepStmts=true&cachePrepStmts=true
+jdbc:postgresql://db:5432/app?reWriteBatchedInserts=true
+```
+
+```java
+private static final int BATCH = 1_000;
+
+public void insertAll(Connection conn, List<Event> events) throws SQLException {
+    boolean prevAutoCommit = conn.getAutoCommit();
+    conn.setAutoCommit(false);
+    String sql = "INSERT INTO events (occurred_at, user_id, kind, payload) VALUES (?, ?, ?, ?)";
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+        int n = 0;
+        for (Event e : events) {
+            ps.setTimestamp(1, Timestamp.from(e.occurredAt()));
+            ps.setLong(2, e.userId());
+            ps.setString(3, e.kind());
+            ps.setString(4, e.payload());
+            ps.addBatch();
+            if (++n % BATCH == 0) {
+                ps.executeBatch();
+                conn.commit();          // transaction sizing: bound lock + WAL exposure
+            }
+        }
+        ps.executeBatch();
+        conn.commit();
+    } catch (SQLException ex) {
+        conn.rollback();
+        throw ex;
+    } finally {
+        conn.setAutoCommit(prevAutoCommit);
+    }
+}
+```
+
+Constraints on the rewrite that bite in production:
+
+- The rewrite only applies to **plain `INSERT ... VALUES`**. Add `ON DUPLICATE KEY UPDATE` (MySQL) or `ON CONFLICT` (PG, pre-9.4.1210 driver behavior varies) and it may silently fall back to one-statement-per-row.
+- `getGeneratedKeys()` on a rewritten batch returns fewer/different keys. If you need IDs back, either generate them client-side or use PG `RETURNING` with a non-rewritten path.
+- Batch too large and you hit `max_allowed_packet` (MySQL, default 64 MB) or blow up driver memory. `executeBatch()` return codes become `SUCCESS_NO_INFO`.
+
+**Batch size tuning:** throughput climbs steeply to ~500, flattens by ~1000–2000, and degrades past ~10,000 as packet size, driver memory, and lock duration grow. Start at 1,000. Measure. Do not "optimize" to 50,000.
+
+### Removing the other costs: indexes, constraints, logging
+
+For a load into an **empty or staging** table, dropping and rebuilding indexes is usually 2–5× faster than maintaining them row by row, because the rebuild is a single sort + bulk-build instead of N random B-tree descents and page splits.
+
+```sql
+-- PostgreSQL: staging load pattern
+BEGIN;
+DROP INDEX IF EXISTS idx_events_user_time;
+ALTER TABLE events DROP CONSTRAINT IF EXISTS events_user_fk;
+COMMIT;
+
+-- ... COPY 50M rows ...
+
+-- Rebuild concurrently so the table stays writable if it is live
+CREATE INDEX CONCURRENTLY idx_events_user_time ON events (user_id, occurred_at DESC);
+ALTER TABLE events ADD CONSTRAINT events_user_fk
+  FOREIGN KEY (user_id) REFERENCES users(id) NOT VALID;
+ALTER TABLE events VALIDATE CONSTRAINT events_user_fk;   -- ShareUpdateExclusive, does not block writes
+ANALYZE events;                                          -- CRITICAL: stats are empty after a bulk load
+```
+
+```sql
+-- MySQL InnoDB
+SET SESSION unique_checks = 0;
+SET SESSION foreign_key_checks = 0;
+SET SESSION sql_log_bin = 0;      -- ONLY if the replica gets the data another way
+LOAD DATA INFILE ...;
+SET SESSION foreign_key_checks = 1;
+SET SESSION unique_checks = 1;
+ANALYZE TABLE events;
+```
+
+Disabling `unique_checks` and `foreign_key_checks` means **you** now guarantee the data is clean. If it is not, you get a corrupt-looking table that passes no validation and a very bad afternoon. Only do this into a staging table you can truncate.
+
+### `UNLOGGED` tables (PostgreSQL)
+
+```sql
+CREATE UNLOGGED TABLE events_staging (LIKE events INCLUDING DEFAULTS);
+-- ... COPY into it: no WAL for the data, ~2-3x faster, near-zero replica lag impact ...
+INSERT INTO events SELECT * FROM events_staging;   -- this part IS logged
+```
+
+Trade-offs you must state out loud before using this:
+
+| Property | Consequence |
+|---|---|
+| Not WAL-logged | Contents are **truncated** after any crash or unclean shutdown |
+| Not replicated | Does not exist on physical replicas; queries there fail |
+| Not restorable by PITR | A backup restore gives you an empty table |
+| `ALTER TABLE ... SET LOGGED` | Rewrites the whole table and WAL-logs it — no free lunch |
+
+Correct use: staging/scratch tables that are always rebuilt from a source of truth. Incorrect use: anything a user can see.
+
+### Upsert at scale
+
+```sql
+-- PostgreSQL: bulk upsert, one statement, index-driven conflict resolution
+INSERT INTO product_prices (sku, price_cents, updated_at)
+SELECT sku, price_cents, now() FROM price_import
+ON CONFLICT (sku) DO UPDATE
+   SET price_cents = EXCLUDED.price_cents,
+       updated_at  = EXCLUDED.updated_at
+WHERE product_prices.price_cents IS DISTINCT FROM EXCLUDED.price_cents;  -- skip no-op UPDATEs
+```
+
+That trailing `WHERE` is the difference between an upsert of 5 million rows and an upsert of the 12,000 rows that actually changed. Without it, every unchanged row still creates a dead tuple, still writes WAL, still bloats the table, and still ships bytes to the replica.
+
+```sql
+-- PostgreSQL 15+ / Oracle / SQL Server: MERGE
+MERGE INTO product_prices p
+USING price_import i ON p.sku = i.sku
+WHEN MATCHED AND p.price_cents <> i.price_cents THEN
+  UPDATE SET price_cents = i.price_cents, updated_at = now()
+WHEN NOT MATCHED THEN
+  INSERT (sku, price_cents, updated_at) VALUES (i.sku, i.price_cents, now());
+```
+
+```sql
+-- MySQL 8
+INSERT INTO product_prices (sku, price_cents, updated_at)
+SELECT sku, price_cents, NOW(6) FROM price_import AS new
+ON DUPLICATE KEY UPDATE
+  price_cents = new.price_cents,      -- 8.0.20+ alias form; VALUES() is deprecated
+  updated_at  = NOW(6);
+```
+
+`MERGE` is not automatically concurrency-safe. In PostgreSQL, `MERGE` under READ COMMITTED can raise a unique violation when two sessions merge the same key concurrently — `INSERT ... ON CONFLICT` handles that case internally, `MERGE` does not. For concurrent writers, prefer `ON CONFLICT`; use `MERGE` for single-writer batch jobs.
+
+### The staging-table pattern (the one to memorize)
+
+```sql
+-- 1. Land raw data fast, no constraints, no indexes
+CREATE UNLOGGED TABLE stg_orders (LIKE orders INCLUDING DEFAULTS);
+-- COPY stg_orders FROM STDIN ...
+
+-- 2. Validate and quarantine in SQL, not in application memory
+CREATE TABLE stg_orders_rejected AS
+SELECT * FROM stg_orders WHERE total_cents < 0 OR customer_id IS NULL;
+DELETE FROM stg_orders s USING stg_orders_rejected r WHERE r.id = s.id;
+
+-- 3. Deduplicate within the batch (source files always have dupes)
+DELETE FROM stg_orders a USING stg_orders b
+WHERE a.external_id = b.external_id AND a.ctid < b.ctid;
+
+-- 4. Merge into the real table in bounded chunks
+INSERT INTO orders (external_id, customer_id, total_cents, created_at)
+SELECT external_id, customer_id, total_cents, created_at
+FROM stg_orders
+ORDER BY external_id
+ON CONFLICT (external_id) DO UPDATE
+   SET total_cents = EXCLUDED.total_cents
+WHERE orders.total_cents IS DISTINCT FROM EXCLUDED.total_cents;
+
+-- 5. Refresh stats, drop staging
+ANALYZE orders;
+DROP TABLE stg_orders;
+```
+
+Every step is restartable, every rejection is inspectable, and the live table is only touched by step 4.
+
+### Transaction sizing and WAL pressure
+
+One giant transaction for 50M rows is not "safer." It is:
+
+- One `xmin` horizon pinned for the whole load → autovacuum cannot clean anything anywhere in the database.
+- One rollback that takes as long as the load did (MySQL undo rollback of 50M rows is brutal).
+- A WAL burst that outruns replica replay → lag alarm → hot standby conflicts.
+- Zero restartability: a network blip at 95% costs you 95%.
+
+| Chunk size | Effect |
+|---|---|
+| 1 row per tx | Fsync-bound; ~500 rows/s |
+| 1k–10k rows per tx | The sweet spot for live tables: short locks, restartable, bounded WAL |
+| 100k+ rows per tx | Acceptable in a maintenance window on a quiet system |
+| Whole load in one tx | Blocks vacuum, huge rollback risk, replica lag spike |
+
+WAL/redo knobs worth setting **for the duration of a load**, then reverting:
+
+```sql
+-- PostgreSQL (postgresql.conf / ALTER SYSTEM; requires reload)
+max_wal_size = '16GB'            -- fewer checkpoints during the load
+checkpoint_timeout = '30min'
+maintenance_work_mem = '2GB'     -- makes CREATE INDEX after the load much faster
+-- synchronous_commit = off      -- session-level only, and only for reloadable data
+```
+
+```sql
+-- MySQL
+SET GLOBAL innodb_flush_log_at_trx_commit = 2;   -- lose ≤1s on OS crash; REVERT AFTER LOAD
+-- innodb_buffer_pool_size should already be ~70% of RAM
+```
+
+`synchronous_commit = off` and `innodb_flush_log_at_trx_commit = 2` trade durability for speed. They are legitimate for a load you can re-run from the source file, and a resume-generating mistake for anything else. Set them `SET LOCAL` / per-session where possible so a forgotten revert cannot become the permanent config.
+
+### Production scenario: nightly catalog import takes 9 hours and lags every replica
+
+**Problem.** A retail platform imports a 40M-row supplier catalog nightly. The job is a Spring Batch writer doing `repository.save()` per item. It started at 40 minutes when the catalog was 2M rows; at 40M rows it runs 9 hours, overruns the morning traffic ramp, and pushes replica lag to 900 seconds — so the storefront serves yesterday's prices while the import is still running.
+
+**Cause.** Three compounding costs. (1) Every `save()` is a separate `INSERT`/`SELECT`+`UPDATE` round trip in its own transaction — the job is fsync- and RTT-bound at roughly 1,200 rows/s, not CPU-bound; DB CPU sat at 15% the whole time. (2) `product` had six indexes, all maintained per row, with random `UUID` values in one of them causing scattered page writes. (3) The writer issued an unconditional `UPDATE` for every row even when nothing changed, so 39.6M no-op updates generated 39.6M dead tuples and ~30 GB of WAL that the replicas had to replay.
+
+**Solution.** Replace the row-by-row writer with COPY into an unlogged staging table, then a single change-only upsert.
+
+```sql
+-- Step 1: land the file (client-side COPY from the batch job, ~4 minutes for 40M rows)
+CREATE UNLOGGED TABLE stg_product (
+  supplier_sku TEXT NOT NULL,
+  name         TEXT NOT NULL,
+  price_cents  BIGINT NOT NULL,
+  in_stock     BOOLEAN NOT NULL
+);
+-- CopyManager.copyIn("COPY stg_product FROM STDIN WITH (FORMAT csv)", reader, 65536)
+
+-- Step 2: dedupe inside the batch — supplier files ship the same SKU twice
+DELETE FROM stg_product a USING stg_product b
+WHERE a.supplier_sku = b.supplier_sku AND a.ctid < b.ctid;
+
+CREATE INDEX ON stg_product (supplier_sku);
+ANALYZE stg_product;
+
+-- Step 3: upsert ONLY rows that actually differ
+INSERT INTO product (supplier_sku, name, price_cents, in_stock, updated_at)
+SELECT s.supplier_sku, s.name, s.price_cents, s.in_stock, now()
+FROM stg_product s
+ON CONFLICT (supplier_sku) DO UPDATE
+SET name        = EXCLUDED.name,
+    price_cents = EXCLUDED.price_cents,
+    in_stock    = EXCLUDED.in_stock,
+    updated_at  = now()
+WHERE (product.name, product.price_cents, product.in_stock)
+      IS DISTINCT FROM (EXCLUDED.name, EXCLUDED.price_cents, EXCLUDED.in_stock);
+
+ANALYZE product;
+DROP TABLE stg_product;
+```
+
+Chunk step 3 by `supplier_sku` range (200k SKUs per transaction) so no single transaction pins the vacuum horizon for more than a couple of minutes.
+
+Result: 9 hours → 11 minutes. WAL volume dropped from ~30 GB to ~600 MB because only the 380k genuinely-changed rows were written, and peak replica lag fell from 900 s to under 4 s.
+
+### Common misconfigurations and symptoms
+
+| Misconfiguration | Symptom |
+|---|---|
+| `addBatch()` without `rewriteBatchedStatements` / `reWriteBatchedInserts` | "We batch already" but throughput identical to row-by-row; N statements in the query log |
+| Batch size 50,000 | `max_allowed_packet` errors, driver OOM, 30-second lock waits |
+| No `ANALYZE` after bulk load | Planner thinks the table has 0 rows → nested loops over 40M rows on the next query |
+| Whole load in one transaction | Autovacuum stalls database-wide; rollback takes hours; replica lag spike |
+| `UNLOGGED` table used for real data | Table silently empty after failover or crash recovery |
+| Unconditional upsert with no change filter | Massive dead-tuple/WAL amplification for a handful of real changes |
+| Forgot to revert `innodb_flush_log_at_trx_commit=2` | Silent durability downgrade in production forever |
+| Indexes dropped on a **live** table during load | Every concurrent read does a seq scan; incident during the "optimization" |
+
+### Debugging scenario
+
+**Observe.** An import job's throughput graph is a flat line at ~900 rows/s regardless of instance size. Scaling the DB from 8 to 32 vCPU changes nothing.
+
+**Diagnose.** Flat throughput that ignores hardware means you are latency-bound, not resource-bound. Confirm: DB CPU low, `pg_stat_statements` shows the INSERT with `calls` equal to the row count and a tiny `mean_exec_time` (0.08 ms) — the server is fast, the *conversation* is slow. `calls ≈ rows` is the definitive fingerprint of an unbatched load.
+
+**Fix.** Batch or COPY. Then re-measure: if throughput is still flat, check `wait_event = WALWrite` (commit fsync per transaction — increase chunk size) or trigger overhead (`SELECT tgname FROM pg_trigger WHERE tgrelid = 'events'::regclass AND NOT tgisinternal`).
+
+---
+
+## 7. Joins: Inner, Outer, Cross, Self — Semantics That Matter
 
 ### Core concept
 
@@ -363,7 +720,7 @@ WHERE NOT EXISTS (
 
 ---
 
-## 7. Subqueries, CTEs, and Correlated Queries
+## 8. Subqueries, CTEs, and Correlated Queries
 
 ### Core concept
 
@@ -432,7 +789,7 @@ WHERE p.id = s.product_id;
 
 ---
 
-## 8. Aggregates, GROUP BY, HAVING, and DISTINCT Pitfalls
+## 9. Aggregates, GROUP BY, HAVING, and DISTINCT Pitfalls
 
 ### Core concept
 
@@ -467,7 +824,7 @@ HAVING SUM(total_cents) > 100000;
 
 ---
 
-## 9. Window Functions: Ranking, Frames, and Production Patterns
+## 10. Window Functions: Ranking, Frames, and Production Patterns
 
 ### Core concept
 
@@ -537,7 +894,7 @@ LIMIT 20;
 
 ---
 
-## 10. Indexes: B-tree, Composite, Covering, Partial
+## 11. Indexes: B-tree, Composite, Covering, Partial
 
 ### Core concept
 
@@ -587,7 +944,570 @@ ON orders (customer_id, status, created_at);
 
 ---
 
-## 11. EXPLAIN / ANALYZE & Reading Execution Plans
+## 12. Index Internals: B+Tree Layout, Clustering, and Physical Cost
+
+### Core concept
+
+An index is not "a lookup table the database consults." It is a **physical data structure whose shape determines which queries are cheap**. Every index decision you make — column order, width, partiality, storage type — is a decision about page layout and I/O count. You cannot reason about index behavior from the SQL alone; you have to know what the pages look like.
+
+### B+tree structure
+
+Relational engines use a **B+tree**, not a B-tree. The distinction matters:
+
+- **Internal (branch) nodes** store only separator keys and child page pointers. They contain no row data.
+- **Leaf nodes** store every key, plus a pointer to the row (`ctid` in PostgreSQL, primary key value in an InnoDB secondary index, or the row itself in an InnoDB clustered index).
+- **Leaves are linked** in a doubly-linked list, which is what makes range scans and `ORDER BY` on the index key cheap: find the start, then walk sideways without re-descending the tree.
+
+```
+                        ┌──────────── root page ────────────┐
+                        │ [ •  k=5000  •  k=10000  •  ]     │   1 page
+                        └───┬──────────┬──────────┬─────────┘
+             ┌──────────────┘          │          └──────────────┐
+        ┌────▼─────┐              ┌────▼─────┐              ┌────▼─────┐
+        │ internal │              │ internal │   ...        │ internal │   ~700 pages
+        └────┬─────┘              └────┬─────┘              └────┬─────┘
+   ┌─────────┴────────┐                │                         │
+┌──▼───────┐   ┌──────▼───┐      ┌─────▼────┐             ┌──────▼───┐
+│ leaf     │◄─►│ leaf     │◄────►│ leaf     │◄─── ... ───►│ leaf     │   ~278,000 pages
+│ k→ctid   │   │ k→ctid   │      │ k→ctid   │             │ k→ctid   │
+└──────────┘   └──────────┘      └──────────┘             └──────────┘
+                     ▲ sibling links: range scans walk here, no re-descent
+```
+
+### Fanout and height math (100M rows)
+
+| Quantity | PostgreSQL (8 KB page) | InnoDB (16 KB page) |
+|---|---|---|
+| Page size | 8192 B | 16384 B |
+| Usable per page after headers/special | ~8000 B | ~15000 B (targets 15/16 fill) |
+| Bytes per internal entry, `BIGINT` key | ~20 B (8 B index-tuple header + 8 B key + 4 B line pointer) | ~22 B (key + 6 B page number + record header) |
+| **Fanout (internal)** | ~400 | ~680 |
+| Leaf entries, `BIGINT` key | ~360 (fillfactor 90) | clustered leaf holds full rows |
+
+For a `BIGINT` index over **100,000,000 rows** in PostgreSQL:
+
+```
+leaf pages       = 100,000,000 / 360      ≈ 277,778
+level-1 pages    =     277,778 / 400      ≈     695
+level-2 pages    =         695 / 400      ≈       2
+root             =                                1
+--------------------------------------------------
+tree height      = 4 levels  (root → L2 → L1 → leaf)
+index size       ≈ 278,476 pages × 8 KB   ≈ 2.2 GB
+```
+
+The operational consequences of that arithmetic:
+
+- **A point lookup in 100M rows costs 4 page accesses, not 100M.** Doubling the table to 200M rows adds *zero* levels (fanout 400 means one more level buys you 400×). Index depth grows logarithmically and practically never exceeds 5 for OLTP tables.
+- **The root and level-2 are always in cache** (3 pages). Level-1 is 695 pages ≈ 5.5 MB — also always cached. So a "4-level tree" is realistically **1 physical read** (the leaf) plus **1 more** for the heap row.
+- **Key width is the enemy of fanout.** Switch that `BIGINT` to a 36-character `VARCHAR` UUID and per-entry cost goes from 20 B to ~48 B: fanout drops from 400 to ~165, leaf entries from 360 to ~150, and the index grows from 2.2 GB to ~5.4 GB. Same rows, 2.5× the I/O.
+
+### Why index column order matters: the leftmost-prefix rule
+
+A composite index `(a, b, c)` is a B+tree sorted by the **tuple** `(a, b, c)` — like a phone book sorted by last name, then first name, then middle name. You can seek efficiently only on a **prefix** of that sort order.
+
+```sql
+CREATE INDEX idx_orders_cst ON orders (customer_id, status, created_at);
+```
+
+| Query | Uses the index? | How |
+|---|---|---|
+| `WHERE customer_id = 42` | ✅ Full seek | Prefix `(a)` |
+| `WHERE customer_id = 42 AND status = 'open'` | ✅ Full seek | Prefix `(a, b)` |
+| `WHERE customer_id = 42 AND status = 'open' AND created_at > '2026-01-01'` | ✅ Best case | Prefix `(a, b)` + range on `c` |
+| `WHERE customer_id = 42 ORDER BY status, created_at` | ✅ Seek + no sort | Index already in that order |
+| `WHERE customer_id = 42 AND created_at > '2026-01-01'` | ⚠️ Partial | Seeks on `a` only, then **filters** every row of that customer on `created_at`; `c` cannot be a seek because `b` is unconstrained |
+| `WHERE status = 'open'` | ❌ No seek | `b` is not a prefix. PG may do an inefficient index-only *scan* of the whole index if it is narrower than the heap; MySQL does a full scan |
+| `WHERE status = 'open' AND created_at > '2026-01-01'` | ❌ No seek | Same reason |
+| `WHERE customer_id IN (1,2,3) AND status = 'open'` | ✅ Seek ×3 | Treated as three prefix seeks |
+| `WHERE customer_id = 42 ORDER BY created_at` | ⚠️ Seek + sort | Rows for customer 42 are ordered by `(status, created_at)`, not `created_at` — an explicit `Sort` node appears |
+
+**The two rules that follow:**
+
+1. **Equality columns first, range column last.** Once you use a range (`>`, `<`, `BETWEEN`, `LIKE 'x%'`) on a column, every column after it in the index can only be used as a filter, never as a seek boundary.
+2. **Match `ORDER BY` direction.** `(status, created_at DESC)` serves `ORDER BY status, created_at DESC` and, by scanning backwards, `ORDER BY status DESC, created_at ASC` — but **not** `ORDER BY status, created_at ASC` without a sort.
+
+```sql
+-- Query: WHERE tenant_id = ? AND status = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 50
+-- Correct: two equalities, then the range/sort column
+CREATE INDEX idx_tickets_hot ON tickets (tenant_id, status, created_at DESC);
+
+-- Wrong: range in the middle wastes the trailing column entirely
+CREATE INDEX idx_tickets_bad ON tickets (tenant_id, created_at DESC, status);
+```
+
+### Covering indexes and index-only scans
+
+If every column the query touches lives in the index, the engine never needs the table. PostgreSQL calls this an **Index Only Scan**; MySQL reports `Using index` in `EXPLAIN`.
+
+```sql
+-- PostgreSQL: INCLUDE columns are stored in the LEAF ONLY, not in internal nodes.
+-- They add zero cost to tree height/fanout but make the leaf level wider.
+CREATE INDEX idx_orders_cover
+ON orders (customer_id, created_at DESC)
+INCLUDE (status, total_cents);
+
+-- This query never touches the heap:
+SELECT status, total_cents FROM orders
+WHERE customer_id = 42 ORDER BY created_at DESC LIMIT 20;
+```
+
+```sql
+-- MySQL: no INCLUDE. Append the payload columns to the key itself.
+CREATE INDEX idx_orders_cover ON orders (customer_id, created_at, status, total_cents);
+```
+
+**The PostgreSQL catch nobody expects:** an index-only scan still has to verify tuple visibility, because index entries do not carry MVCC information. PostgreSQL consults the **visibility map** — a bitmap with one bit per heap page saying "all tuples on this page are visible to everyone." If the page is not marked all-visible, the scan falls back to a heap fetch for that row.
+
+```
+Index Only Scan using idx_orders_cover on orders  (cost=0.57..8.62 rows=20 width=16)
+                                                   (actual time=0.031..0.078 rows=20 loops=1)
+  Index Cond: (customer_id = 42)
+  Heap Fetches: 19        ← 19 of 20 rows still hit the heap. The "index-only" scan isn't.
+```
+
+`Heap Fetches` > 0 on a hot table means **autovacuum is not keeping the visibility map current**. The fix is vacuum tuning, not another index:
+
+```sql
+ALTER TABLE orders SET (autovacuum_vacuum_scale_factor = 0.02,
+                        autovacuum_analyze_scale_factor = 0.01);
+VACUUM (ANALYZE) orders;   -- refreshes the visibility map immediately
+```
+
+### Clustered vs secondary indexes in InnoDB
+
+This is the single biggest structural difference between InnoDB and PostgreSQL, and it drives half of MySQL performance advice.
+
+| | PostgreSQL | InnoDB |
+|---|---|---|
+| Table storage | **Heap** — unordered pages; PK is just another B-tree | **Index-organized** — the clustered index *is* the table |
+| Primary key index leaf contains | `(pk_value → ctid)` | The entire row |
+| Secondary index leaf contains | `(key → ctid)` — direct pointer to heap page/offset | `(key → primary_key_value)` — **not** a physical pointer |
+| Reading a non-covered column via secondary index | 1 index descent + 1 heap page read | 1 index descent + **a second full B-tree descent** of the clustered index |
+| Cost of a wide PK | Paid once, in the PK index | Paid in **every** secondary index, in every row of every one of them |
+
+That last row is the whole story. In InnoDB, a secondary index entry is `(index_columns, primary_key)`. With a `BIGINT` PK, each secondary entry carries 8 extra bytes. With a `CHAR(36)` UUID PK, it carries 36. Across five secondary indexes and 100M rows that is 100,000,000 × 5 × 28 extra bytes ≈ **14 GB of pure overhead**, all of it competing for buffer pool.
+
+The "second descent" is called a **bookmark lookup**. `EXPLAIN` will not shout about it; you see it as unexpectedly high `handler_read_next` counts and a query that is 3× slower than the row count suggests. The fix is a covering index so the second descent never happens.
+
+### Why a random UUID primary key destroys insert performance
+
+```
+SEQUENTIAL PK (BIGINT AUTO_INCREMENT / UUIDv7)
+  every insert targets the RIGHTMOST leaf page
+  ┌────┬────┬────┬────┬────┬─────┐
+  │ ██ │ ██ │ ██ │ ██ │ ██ │ ▓░  │ ← all inserts land here
+  └────┴────┴────┴────┴────┴─────┘
+  • 1 hot page in the buffer pool, always cached → zero read I/O
+  • pages fill to ~15/16 before a clean split at the right edge
+  • table size ≈ data size
+
+RANDOM UUIDv4 PK
+  every insert targets a RANDOM leaf page out of 1,400,000
+  ┌────┬────┬────┬────┬────┬─────┐
+  │ ▓░ │ ██ │ ▓░ │ ██ │ ▓░ │ ██  │ ← inserts scattered everywhere
+  └─▲──┴────┴──▲─┴────┴─▲──┴─────┘
+    │          │        │
+  • target page is usually NOT in the buffer pool → 1 random READ per insert
+  • a full target page SPLITS 50/50 → two half-empty pages
+  • steady state: pages ~50-60% full → table 1.5-2x larger → even worse cache hit rate
+```
+
+The collapse is not gradual; it is a **cliff**. While the index fits in the buffer pool, random inserts are fine (all pages cached, no read I/O). The moment the index exceeds the buffer pool, every insert becomes a random read from disk. Throughput falls from ~30k inserts/s to ~2k inserts/s over the span of a few days of growth, which is why the incident always looks like "nothing changed."
+
+Secondary damage from page splits:
+- **Fragmentation**: logical order no longer matches physical order, so range scans read 2× the pages.
+- **Doubled index size**: 50% fill vs 94% fill.
+- **WAL/redo amplification**: a page split writes a full-page image of two pages.
+
+**The fix — time-ordered identifiers.** Keep the properties you actually wanted from UUID (client-side generation, no coordination, non-guessable-ish) while restoring monotonicity:
+
+| Option | Notes |
+|---|---|
+| `BIGINT` identity/sequence | Fastest, narrowest. Leaks row counts; needs a server round trip or client-side range allocation |
+| **UUIDv7** (RFC 9562) | 48-bit Unix-ms timestamp prefix + randomness. Drop-in replacement for v4; native `uuidv7()` in PostgreSQL 18, `pg_uuidv7` extension before that |
+| **ULID** | 48-bit timestamp + 80 bits randomness, Crockford base32, lexicographically sortable |
+| Snowflake ID | 64-bit: timestamp + node id + sequence. Needs node-id coordination |
+| UUIDv4 as a **secondary** unique column | Keep `BIGINT` PK for physical order, expose the UUID externally. Best of both, costs one extra index |
+
+```sql
+-- PostgreSQL: store UUIDs as the native uuid type (16 bytes), never as text (36+ bytes)
+ALTER TABLE events ALTER COLUMN id TYPE uuid USING id::uuid;
+
+-- MySQL: 16-byte binary, with the v1 time-swap trick if you are stuck on v1
+CREATE TABLE events (
+  id BINARY(16) PRIMARY KEY,            -- app inserts UUID_TO_BIN(uuid, 1) or a ULID
+  ...
+) ENGINE=InnoDB;
+
+-- Migration path when you cannot change the PK type: add a sequential surrogate
+ALTER TABLE events ADD COLUMN seq BIGINT AUTO_INCREMENT UNIQUE;
+```
+
+### Heap vs index-organized tables
+
+| Model | Engines | Strength | Weakness |
+|---|---|---|---|
+| **Heap** | PostgreSQL (only option), Oracle default, SQL Server without clustered index | Cheap inserts anywhere; all indexes are equal-cost; updates can be HOT | Every index lookup needs a heap visit; no natural clustering |
+| **Index-organized / clustered** | InnoDB (mandatory), Oracle IOT, SQL Server clustered index | PK range scans are sequential; PK lookups need no second read | Secondary lookups pay a bookmark lookup; PK width poisons every index; random PK causes splits |
+
+PostgreSQL offers `CLUSTER table USING index` — but this is a **one-time physical reorder** under an `AccessExclusive` lock, and new/updated rows go wherever there is space. It is not maintained. The maintained approximation is `pg_repack --order-by`, or `BRIN` indexes on naturally correlated columns.
+
+### HOT updates (PostgreSQL)
+
+In PostgreSQL, `UPDATE` is `INSERT` + mark-old-dead. Normally that means **every index on the table gets a new entry**, even for indexes on columns you did not touch. **Heap-Only Tuple (HOT)** updates avoid this, under two conditions:
+
+1. No **indexed** column was modified.
+2. The new tuple version fits on the **same heap page** as the old one.
+
+When both hold, the new version is chained from the old via `t_ctid` and **no index entry is written at all**. This is the difference between a 5,000/s update workload and a 500/s one.
+
+Condition 2 is why `fillfactor` exists:
+
+```sql
+-- Leave 15% of each page free for future HOT updates on an update-heavy table
+ALTER TABLE user_sessions SET (fillfactor = 85);
+VACUUM FULL user_sessions;   -- or pg_repack, to apply fillfactor to existing pages
+
+-- Measure the HOT ratio: aim for >90% on hot tables
+SELECT relname,
+       n_tup_upd,
+       n_tup_hot_upd,
+       round(100.0 * n_tup_hot_upd / nullif(n_tup_upd, 0), 1) AS hot_pct
+FROM pg_stat_user_tables
+WHERE n_tup_upd > 100000
+ORDER BY hot_pct NULLS FIRST;
+```
+
+A low `hot_pct` on a table you update constantly means either fillfactor is 100 (default) or you are updating an indexed column — often `updated_at`, which somebody indexed "just in case."
+
+### Index bloat and `REINDEX`
+
+B+tree pages are not compacted when entries are deleted. A table that churns keys (queue tables, session tables, anything with a high-water-mark delete pattern) accumulates nearly-empty leaf pages. The index can be 5 GB while holding 500 MB of live entries — and every scan reads the empty pages too.
+
+```sql
+-- PostgreSQL: measure (requires CREATE EXTENSION pgstattuple)
+SELECT i.indexrelid::regclass AS index_name,
+       pg_size_pretty(pg_relation_size(i.indexrelid)) AS size,
+       s.avg_leaf_density,          -- healthy ≈ 90; bloated < 50
+       s.leaf_fragmentation
+FROM pg_index i
+CROSS JOIN LATERAL pgstatindex(i.indexrelid::regclass::text) s
+WHERE pg_relation_size(i.indexrelid) > 100 * 1024 * 1024
+ORDER BY s.avg_leaf_density;
+
+-- Rebuild WITHOUT an exclusive lock (PG 12+)
+REINDEX INDEX CONCURRENTLY idx_jobs_status_created;
+REINDEX TABLE CONCURRENTLY jobs;
+
+-- Pre-12 equivalent: build a twin, then swap
+CREATE INDEX CONCURRENTLY idx_jobs_status_created_new ON jobs (status, created_at);
+DROP INDEX CONCURRENTLY idx_jobs_status_created;
+ALTER INDEX idx_jobs_status_created_new RENAME TO idx_jobs_status_created;
+```
+
+```sql
+-- MySQL InnoDB: rebuild in place
+ALTER TABLE jobs ENGINE=InnoDB, ALGORITHM=INPLACE, LOCK=NONE;
+-- or OPTIMIZE TABLE jobs;  (does the same for InnoDB, plus ANALYZE)
+```
+
+`REINDEX CONCURRENTLY` leaves an invalid index behind if it fails mid-flight. Always check afterward:
+
+```sql
+SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;
+```
+
+### Partial (filtered) indexes
+
+Index only the rows you query. The savings compound: smaller index → fewer levels → better cache residency → cheaper writes (rows outside the predicate cost nothing to insert).
+
+```sql
+-- PostgreSQL: a queue table where 0.1% of rows are pending
+CREATE INDEX CONCURRENTLY idx_jobs_pending
+ON jobs (priority DESC, created_at)
+WHERE status = 'pending';
+-- 200M-row table, 40k pending rows → index is ~1.5 MB instead of ~9 GB
+
+-- Soft-delete pattern: never index the tombstones
+CREATE INDEX idx_users_email_active ON users (lower(email)) WHERE deleted_at IS NULL;
+
+-- Enforce "one active subscription per customer" without touching cancelled rows
+CREATE UNIQUE INDEX uq_active_sub ON subscriptions (customer_id) WHERE status = 'active';
+```
+
+The planner uses a partial index only if it can **prove** the query predicate implies the index predicate. `WHERE status = 'pending'` matches; `WHERE status = $1` with a parameter does **not** (the planner cannot prove it at plan time for a generic plan), and neither does `WHERE status <> 'done'`. This is the #1 reason a partial index looks "ignored."
+
+SQL Server has the same feature as **filtered indexes** (`CREATE INDEX ... WHERE`). **MySQL has no partial indexes** — emulate with a generated column:
+
+```sql
+ALTER TABLE jobs ADD COLUMN pending_key BIGINT
+  GENERATED ALWAYS AS (IF(status = 'pending', id, NULL)) STORED;
+CREATE INDEX idx_jobs_pending ON jobs (pending_key);   -- NULLs are still stored, but the index is narrow
+```
+
+### Expression indexes
+
+An index on a **function result**. Required whenever your predicate applies a function to a column, because a plain index on the column is useless there.
+
+```sql
+-- PostgreSQL
+CREATE INDEX idx_users_lower_email ON users (lower(email));
+-- serves: WHERE lower(email) = lower($1)
+
+CREATE INDEX idx_events_day ON events (date_trunc('day', occurred_at));
+CREATE INDEX idx_orders_json_status ON orders ((payload->>'status'));
+
+-- MySQL 8.0.13+ functional index (implemented as a hidden generated column)
+CREATE INDEX idx_users_lower_email ON users ((LOWER(email)));
+```
+
+Two hard requirements: the function must be **`IMMUTABLE`** (PostgreSQL will refuse otherwise — `now()`, `to_char` with a locale-dependent format, and anything reading a GUC are out), and the query must use the expression **byte-identically**. `lower(email)` matches; `LOWER(TRIM(email))` does not.
+
+### Choosing a storage type: GIN, GiST, BRIN, hash
+
+| Type | Data structure | Best for | Cost |
+|---|---|---|---|
+| **B-tree** | B+tree | `=`, `<`, `>`, `BETWEEN`, `LIKE 'x%'`, `ORDER BY`, uniqueness | The default; nothing else does ordering |
+| **Hash** | Hash table | Equality only, on very wide values (long URLs, hashes) | No ranges, no ordering, no uniqueness. WAL-logged and crash-safe only since PG 10. Rarely worth it over B-tree |
+| **GIN** | Inverted index (key → posting list of row ids) | Multi-valued columns: `jsonb` containment `@>`, arrays `&&`, full-text `tsvector @@`, trigram `LIKE '%mid%'` | Slow to update (mitigated by the `fastupdate` pending list), large, but enormously fast for "which rows contain this token" |
+| **GiST** | Generalized balanced tree over user-defined predicates | Geometry/PostGIS, range types, exclusion constraints, k-NN `ORDER BY location <-> point` | Lossy — may return false positives that need rechecking; slower point lookups than GIN for text search |
+| **SP-GiST** | Space-partitioned (quadtree, radix trie) | Non-balanced data: IP prefixes (`inet`), phone prefixes, point clouds | Niche |
+| **BRIN** | Min/max summary per block range | Huge, **naturally correlated** tables: append-only time-series, log tables | Index for 1 TB of data is a few MB. Useless the moment physical order stops correlating with the column |
+
+```sql
+-- BRIN on an append-only events table: 100 GB table → ~3 MB index
+CREATE INDEX idx_events_brin ON events USING BRIN (occurred_at) WITH (pages_per_range = 64);
+
+-- GIN for JSONB containment
+CREATE INDEX idx_orders_payload ON orders USING GIN (payload jsonb_path_ops);
+SELECT * FROM orders WHERE payload @> '{"channel":"mobile"}';
+
+-- GIN + pg_trgm makes leading-wildcard LIKE indexable
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX idx_products_name_trgm ON products USING GIN (name gin_trgm_ops);
+SELECT * FROM products WHERE name ILIKE '%wireless%';   -- now uses the index
+
+-- Exclusion constraint via GiST: no two bookings for the same room may overlap
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+ALTER TABLE bookings ADD CONSTRAINT no_double_booking
+  EXCLUDE USING GiST (room_id WITH =, during WITH &&);
+```
+
+Verify BRIN is actually viable before using it — check the physical/logical correlation:
+
+```sql
+SELECT attname, correlation FROM pg_stats
+WHERE tablename = 'events' AND attname = 'occurred_at';
+-- correlation near 1.0 (or -1.0) → BRIN works. Near 0 → BRIN is worthless.
+```
+
+### Full-text search indexes
+
+```sql
+-- PostgreSQL: generated tsvector column + GIN. Do NOT compute to_tsvector() at query time on every row.
+ALTER TABLE articles ADD COLUMN search_vec tsvector
+  GENERATED ALWAYS AS (
+    setweight(to_tsvector('english', coalesce(title, '')),  'A') ||
+    setweight(to_tsvector('english', coalesce(body,  '')),  'B')
+  ) STORED;
+
+CREATE INDEX idx_articles_search ON articles USING GIN (search_vec);
+
+SELECT id, title, ts_rank(search_vec, q) AS rank
+FROM articles, websearch_to_tsquery('english', 'postgres index bloat') q
+WHERE search_vec @@ q
+ORDER BY rank DESC
+LIMIT 20;
+```
+
+```sql
+-- MySQL InnoDB
+CREATE FULLTEXT INDEX ft_articles ON articles (title, body);
+SELECT id, MATCH(title, body) AGAINST ('index bloat' IN NATURAL LANGUAGE MODE) AS score
+FROM articles
+WHERE MATCH(title, body) AGAINST ('index bloat' IN NATURAL LANGUAGE MODE)
+ORDER BY score DESC LIMIT 20;
+```
+
+Know the limits before you promise search: no typo tolerance, stemming is language-configured at index time (changing the config requires a rebuild), relevance ranking is primitive compared to a real search engine, and GIN updates are expensive on write-heavy tables. Built-in FTS is right for "search my 2M support tickets"; it is wrong for "be Elasticsearch."
+
+### Selectivity, cardinality, and when an index makes things *slower*
+
+**Cardinality** = number of distinct values. **Selectivity** = fraction of rows a predicate returns. Indexes pay off when selectivity is *low* (few rows returned).
+
+```sql
+-- PostgreSQL: what the planner actually believes about a column
+SELECT attname, n_distinct, null_frac, correlation,
+       most_common_vals, most_common_freqs
+FROM pg_stats
+WHERE tablename = 'orders' AND attname IN ('status', 'customer_id');
+```
+
+`n_distinct` is negative when it is a **ratio** (`-1` = every value unique). `most_common_freqs` is what tells the planner that `status='completed'` is 94% of rows and `status='refunded'` is 0.1% — the same query text gets two different plans depending on the parameter, which is correct behavior and a frequent source of "the query got slow for no reason."
+
+**An index scan is slower than a sequential scan when:**
+
+| Situation | Why |
+|---|---|
+| Predicate matches >5–20% of rows | Each match is a random heap read (~8 KB); a seq scan reads sequentially at 10–50× the throughput. Crossover depends on `random_page_cost` (default 4.0 — **should be ~1.1 on SSD/NVMe**) |
+| The table is small (< a few thousand rows) | The whole table is 1–20 pages. A seq scan is one read; an index adds tree descents for nothing |
+| Low correlation between index order and heap order | 10,000 matching rows scattered across 10,000 different pages = 10,000 random reads |
+| The index is bloated | You read the empty pages too |
+| The workload is write-dominated | See write amplification below |
+
+```sql
+-- The single most impactful PostgreSQL setting on modern storage
+ALTER SYSTEM SET random_page_cost = 1.1;    -- default 4.0 assumes spinning disks
+ALTER SYSTEM SET effective_cache_size = '48GB';  -- ~75% of RAM; tells the planner what's cacheable
+SELECT pg_reload_conf();
+```
+
+Leaving `random_page_cost = 4.0` on NVMe is why the planner refuses a perfectly good index and does a sequential scan on a 200M-row table.
+
+### Invisible / hypothetical indexes
+
+Dropping an index to test whether it is needed is a one-way door on a large table — rebuilding takes hours. Every mature engine offers a way to test first.
+
+```sql
+-- MySQL 8.0 / Oracle 11g+: make the index invisible to the optimizer but keep it maintained
+ALTER TABLE orders ALTER INDEX idx_orders_legacy INVISIBLE;
+-- ... watch for regressions for a week ...
+ALTER TABLE orders ALTER INDEX idx_orders_legacy VISIBLE;    -- instant rollback
+ALTER TABLE orders DROP INDEX idx_orders_legacy;             -- or commit to the drop
+
+-- Test a specific session against an invisible index without making it visible globally
+SET SESSION optimizer_switch = 'use_invisible_indexes=on';
+```
+
+PostgreSQL has **no** invisible indexes. Use the inverse tool — `hypopg` creates an index that exists only in the planner's imagination, so you can `EXPLAIN` a candidate index without building it:
+
+```sql
+CREATE EXTENSION hypopg;
+SELECT * FROM hypopg_create_index('CREATE INDEX ON orders (customer_id, created_at DESC)');
+EXPLAIN SELECT * FROM orders WHERE customer_id = 42 ORDER BY created_at DESC LIMIT 20;
+SELECT hypopg_reset();
+```
+
+Find drop candidates first:
+
+```sql
+-- PostgreSQL: never scanned, and not backing a constraint
+SELECT s.relname AS table_name, s.indexrelname AS index_name,
+       pg_size_pretty(pg_relation_size(s.indexrelid)) AS size, s.idx_scan
+FROM pg_stat_user_indexes s
+JOIN pg_index i ON i.indexrelid = s.indexrelid
+WHERE s.idx_scan = 0 AND NOT i.indisunique AND NOT i.indisprimary
+ORDER BY pg_relation_size(s.indexrelid) DESC;
+
+-- MySQL
+SELECT * FROM sys.schema_unused_indexes;
+```
+
+Check `idx_scan` against a window that includes month-end and quarter-end reporting before you drop anything. Also confirm the counters were not reset (`pg_stat_reset()`) and that you are looking at **all** replicas — an index unused on the primary may be the only thing keeping the reporting replica alive.
+
+### Index write amplification
+
+Every index is a tax on every write. One `INSERT` into a table with **N** secondary indexes is **1 + N** B-tree modifications, each potentially a random page read, a dirty page, and a WAL record.
+
+```
+INSERT into a table with 8 indexes:
+  1 heap/clustered write
++ 8 index descents + 8 leaf modifications
++ 8 WAL records (plus full-page images after each checkpoint)
+= ~9x the I/O of the same insert on an index-free table
+```
+
+| Indexes | Relative insert cost | Relative delete cost |
+|---|---|---|
+| 1 (PK only) | 1.0× | 1.0× |
+| 3 | ~2.2× | ~2.2× |
+| 8 | ~5–9× | ~5–9× (deletes must remove every entry) |
+
+`UPDATE` is worse in PostgreSQL: unless the update is HOT, *all* indexes get a new entry even for untouched columns. In InnoDB, an update to a non-indexed column is in-place and cheap; an update to an indexed column is delete+insert in that index.
+
+Practical ceiling: **5–6 indexes per hot OLTP table**. Past that, consolidate — one well-ordered composite index usually replaces three single-column ones, because the leftmost-prefix rule means `(a, b, c)` already serves `(a)` and `(a, b)`.
+
+### Production scenario: insert throughput fell off a cliff at 60M rows
+
+**Problem.** An IoT ingestion service writes device readings to MySQL 8 / InnoDB. For eight months it sustained 28,000 inserts/sec with headroom. Over four days it degraded to 2,100 inserts/sec. No deploy, no config change, no traffic change. The Kafka consumer lag climbed until the retention window started dropping data. DB CPU was 30%, but disk read IOPS had gone from near zero to 24,000/sec — on a table that only ever gets written to.
+
+**Cause.** The table's primary key was `CHAR(36)` holding a UUIDv4 generated in the application. Two failures compounded:
+
+1. **The cliff.** The clustered index had grown to 42 GB against a 32 GB buffer pool. While the index fit in memory, random insert positions cost nothing. Once it did not, *every* insert had to fetch a random 16 KB leaf page from disk first — hence read IOPS on a write-only table. That is the exact signature of a random-PK cliff, and it is why nothing "changed" on the day it broke.
+2. **The amplification.** `CHAR(36)` with `utf8mb4` is 144 bytes per PK value. Every one of the four secondary indexes stored that PK in each entry: 60M rows × 4 indexes × ~144 bytes ≈ **34 GB** of secondary index space existing solely to point back at the clustered index. Page splits from random inserts had left leaf pages ~55% full, roughly doubling everything again.
+
+```sql
+-- The confirmation: index far larger than the data it describes
+SELECT table_name,
+       ROUND(data_length /1024/1024/1024, 1) AS data_gb,
+       ROUND(index_length/1024/1024/1024, 1) AS index_gb
+FROM information_schema.tables
+WHERE table_schema = 'iot' AND table_name = 'reading';
+-- data_gb: 42.0   index_gb: 61.3
+
+SHOW ENGINE INNODB STATUS\G
+-- BUFFER POOL AND MEMORY: "Buffer pool hit rate 771 / 1000"  ← was 999/1000 in March
+```
+
+**Solution.** Move to a monotonic key and keep the UUID as an external identifier only. Done online with `gh-ost` so ingestion never stopped.
+
+```sql
+-- 1. New table: sequential BIGINT clustered PK; the UUID becomes a narrow BINARY(16) secondary key
+CREATE TABLE reading_v2 (
+  id            BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  external_id   BINARY(16) NOT NULL,            -- 16 bytes, not 144
+  device_id     BIGINT UNSIGNED NOT NULL,
+  recorded_at   TIMESTAMP(6) NOT NULL,
+  value         DOUBLE NOT NULL,
+  UNIQUE KEY uq_reading_external (external_id),
+  KEY idx_reading_device_time (device_id, recorded_at)   -- 4 indexes consolidated into 1 composite
+) ENGINE=InnoDB;
+
+-- 2. Backfill + cutover with gh-ost (no table lock, throttled on replica lag)
+-- gh-ost --database=iot --table=reading --alter="ENGINE=InnoDB" \
+--         --max-lag-millis=1500 --chunk-size=2000 --execute
+
+-- 3. Application change: generate UUIDv7 instead of v4 for external_id, and store it binary
+--    INSERT ... VALUES (UUID_TO_BIN(?, 1), ...)
+```
+
+For teams that cannot change the PK type at all, the equivalent PostgreSQL-side fix is the same idea expressed differently:
+
+```sql
+-- PostgreSQL: keep uuid as PK but make it time-ordered so inserts go to the right edge
+ALTER TABLE reading ALTER COLUMN id SET DEFAULT uuidv7();   -- PG 18; or gen_uuid_v7() from pg_uuidv7
+```
+
+Result: clustered index 42 GB → 9.1 GB, secondary indexes 61 GB → 6.4 GB, both comfortably inside the buffer pool. Read IOPS returned to ~0. Sustained throughput went to 41,000 inserts/sec, higher than the original baseline because the composite index replaced four separate ones and cut write amplification from 5× to 3×.
+
+### Common misconfigurations and symptoms
+
+| Misconfiguration | Symptom |
+|---|---|
+| `random_page_cost = 4.0` on SSD/NVMe | Planner picks seq scans over perfectly good indexes; "the index exists but isn't used" |
+| Random UUID as clustered PK | Insert throughput cliff once the index exceeds the buffer pool; index larger than the data |
+| `VARCHAR`/`CHAR` UUID instead of `uuid`/`BINARY(16)` | 2–4× index size; halved fanout; halved cache hit rate |
+| Range column in the middle of a composite index | Trailing columns never used for seeks; unexplained `Sort` nodes |
+| Index-only scan with high `Heap Fetches` | Visibility map stale — vacuum problem masquerading as an index problem |
+| `fillfactor = 100` on an update-heavy PG table | `n_tup_hot_upd` near zero; every update writes to every index; table bloats |
+| Partial index with a parameterized predicate | Index "ignored" because the planner cannot prove predicate implication |
+| Expression index whose function is not `IMMUTABLE` | `CREATE INDEX` fails, or the index silently never matches the query |
+| BRIN on an uncorrelated column | Index is tiny and matches every block range — full scan with extra steps |
+| 12 indexes on a hot OLTP table | Writes 5–9× more expensive; autovacuum/purge falls behind; disk doubles |
+| Dropping an index on a hunch instead of `INVISIBLE`/`hypopg` | Multi-hour rebuild during the incident you just caused |
+
+### Debugging scenario
+
+**Observe.** A query that uses `idx_orders_cst (customer_id, status, created_at)` runs in 3 ms for most customers and 4 seconds for twelve of them.
+
+**Diagnose.** This is a **skew** problem, not a missing-index problem. Those twelve are enterprise accounts with 2M orders each; the index seek on `customer_id` is fine, but it returns 2M leaf entries that then need heap visits. Confirm with `EXPLAIN (ANALYZE, BUFFERS)` — look for a huge gap between `rows` returned by the index scan and `rows` after the filter, plus `Rows Removed by Filter` in the millions and `shared read` in the hundreds of thousands.
+
+**Fix.** Depends on the query. If it filters on `status`, the composite already covers it — check that the predicate uses the same type (`status = 'open'::text`, not an implicit cast). If it sorts and limits, add `created_at DESC` as the trailing column so the `LIMIT` can stop early instead of sorting 2M rows. If it aggregates, this is not an OLTP query and belongs on a rollup table or a replica. Verify with `most_common_freqs` in `pg_stats` that the planner knows about the skew; if `n_distinct` is wrong, `ALTER TABLE orders ALTER COLUMN customer_id SET STATISTICS 1000; ANALYZE orders;`.
+
+---
+
+## 13. EXPLAIN / ANALYZE & Reading Execution Plans
 
 ### Core concept
 
@@ -647,7 +1567,7 @@ ANALYZE TABLE orders;
 
 ---
 
-## 12. Query Optimization Playbook
+## 14. Query Optimization Playbook
 
 ### Ordered steps (do not skip)
 
@@ -687,7 +1607,7 @@ Hints mask statistics problems — fix stats and schema first.
 
 ---
 
-## 13. Transactions & ACID — What the Database Actually Guarantees
+## 15. Transactions & ACID — What the Database Actually Guarantees
 
 ### ACID
 
@@ -720,7 +1640,7 @@ COMMIT;  -- or ROLLBACK;
 
 ---
 
-## 14. Isolation Levels: READ UNCOMMITTED Through SERIALIZABLE
+## 16. Isolation Levels: READ UNCOMMITTED Through SERIALIZABLE
 
 ### ANSI levels
 
@@ -769,7 +1689,7 @@ UPDATE accounts SET balance = 1000 - 100 WHERE id = 1;  -- both write 900
 
 ---
 
-## 15. MVCC: PostgreSQL vs MySQL InnoDB
+## 17. MVCC: PostgreSQL vs MySQL InnoDB
 
 ### Core concept
 
@@ -808,7 +1728,7 @@ Multi-Version Concurrency Control: readers don't block writers; writers don't bl
 
 ---
 
-## 16. Locking: Row, Table, Gap, Next-Key
+## 18. Locking: Row, Table, Gap, Next-Key
 
 ### Lock types
 
@@ -850,7 +1770,7 @@ SELECT * FROM sys.innodb_lock_waits;
 
 ---
 
-## 17. Deadlocks: Detection, Prevention, Recovery
+## 19. Deadlocks: Detection, Prevention, Recovery
 
 ### Core concept
 
@@ -896,7 +1816,7 @@ SELECT id FROM accounts WHERE id IN (?, ?) ORDER BY id FOR UPDATE;
 
 ---
 
-## 18. Connection Pooling Math: max_connections vs App Pods
+## 20. Connection Pooling Math: max_connections vs App Pods
 
 ### Core concept
 
@@ -944,7 +1864,7 @@ If Hikari `maximumPoolSize=50` × 10 pods = 500 → **connection storms**, `FATA
 
 ---
 
-## 19. Read Replicas & Replication Lag
+## 21. Read Replicas & Replication Lag
 
 ### Core concept
 
@@ -996,7 +1916,7 @@ Primary accepts writes; replicas replay WAL (PG streaming replication) or binlog
 
 ---
 
-## 20. Partitioning & Sharding Basics
+## 22. Partitioning & Sharding Basics
 
 ### Partitioning (single DB, split tables)
 
@@ -1053,7 +1973,7 @@ Split data by **shard key** (`tenant_id`, `user_id % N`). Application or proxy (
 
 ---
 
-## 21. Stored Procedures: When / When Not
+## 23. Stored Procedures: When / When Not
 
 ### When stored procedures help
 
@@ -1105,7 +2025,7 @@ Flyway/Liquibase can deploy procedures — but **rolling deploy** with two app v
 
 ---
 
-## 22. Flyway / Liquibase Migration Safety
+## 24. Flyway / Liquibase Migration Safety
 
 ### Core concept
 
@@ -1161,7 +2081,7 @@ ALTER TABLE orders ALTER COLUMN discount_cents SET NOT NULL;
 
 ---
 
-## 23. Production Scenarios: Slow Query, Missing Index, Lock Wait, Replica Lag
+## 25. Production Scenarios: Slow Query, Missing Index, Lock Wait, Replica Lag
 
 ### Scenario A: Slow query — dashboard timeout
 
@@ -1223,7 +2143,7 @@ EXPLAIN ANALYZE shows seq scan on `orders` filtering `created_at` range.
 
 ---
 
-## 24. Production Debugging Playbook
+## 26. Production Debugging Playbook
 
 When a database incident is "random," it is usually **locks**, **plan regression**, **pool math**, or **lag**.
 
@@ -1287,7 +2207,7 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-## 25. Quick Decision Matrix
+## 27. Quick Decision Matrix
 
 | Situation | Do this |
 |---|---|
@@ -1310,9 +2230,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-## 26. Scenario-Based Questions
+## Practice Questions & Answers
 
-### 1. Report returns fewer rows after "optimization" to INNER JOIN?
+<details class="qa-item">
+<summary>1. Report returns fewer rows after "optimization" to INNER JOIN?</summary>
 
 **Root cause.** INNER JOIN removed parent rows without child matches. LEFT JOIN was correct for optional relationship.
 
@@ -1320,7 +2241,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 2. PostgreSQL disk growing 10GB/day but row count stable?
+</details>
+
+<details class="qa-item">
+<summary>2. PostgreSQL disk growing 10GB/day but row count stable?</summary>
 
 **Root cause.** Dead tuples from UPDATE-heavy workload; autovacuum not keeping up; long transactions block vacuum horizon.
 
@@ -1328,7 +2252,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 3. MySQL primary key UUID — insert rate collapsed?
+</details>
+
+<details class="qa-item">
+<summary>3. MySQL primary key UUID — insert rate collapsed?</summary>
 
 **Root cause.** Random UUID v4 as InnoDB clustered PK causes random page inserts and splits.
 
@@ -1336,7 +2263,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 4. `SELECT COUNT(*)` on 500M-row table kills production?
+</details>
+
+<details class="qa-item">
+<summary>4. `SELECT COUNT(*)` on 500M-row table kills production?</summary>
 
 **Root cause.** Full index or heap scan; MVCC must visit visible rows (PG) or index traverse (InnoDB).
 
@@ -1344,7 +2274,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 5. Serializable transaction aborted with 40001 — users see random failures?
+</details>
+
+<details class="qa-item">
+<summary>5. Serializable transaction aborted with 40001 — users see random failures?</summary>
 
 **Root cause.** PostgreSQL SSI detected rw-conflict; high contention on hot rows.
 
@@ -1352,7 +2285,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 6. Gap locks blocking inserts — InnoDB RR?
+</details>
+
+<details class="qa-item">
+<summary>6. Gap locks blocking inserts — InnoDB RR?</summary>
 
 **Root cause.** Locking read `SELECT ... FOR UPDATE` on range locks gaps; concurrent inserts into gap wait.
 
@@ -1360,7 +2296,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 7. Flyway V2 edited after production deploy — dev broken?
+</details>
+
+<details class="qa-item">
+<summary>7. Flyway V2 edited after production deploy — dev broken?</summary>
 
 **Root cause.** Checksum mismatch; Flyway refuses to migrate.
 
@@ -1368,7 +2307,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 8. App works in dev (100 rows), prod query timeout (100M rows)?
+</details>
+
+<details class="qa-item">
+<summary>8. App works in dev (100 rows), prod query timeout (100M rows)?</summary>
 
 **Root cause.** Missing index; nested loop chosen due to bad stats; dev never representative.
 
@@ -1376,7 +2318,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 9. Duplicate orders from double-click — only one should exist?
+</details>
+
+<details class="qa-item">
+<summary>9. Duplicate orders from double-click — only one should exist?</summary>
 
 **Root cause.** No idempotency key unique constraint; two POSTs same payload.
 
@@ -1384,7 +2329,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 10. Replica CPU high but primary fine?
+</details>
+
+<details class="qa-item">
+<summary>10. Replica CPU high but primary fine?</summary>
 
 **Root cause.** Analytics on replica; missing index same as primary; parallel replay workers; or many small commits replay overhead.
 
@@ -1392,7 +2340,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 11. `DELETE` faster than `TRUNCATE` team expected — opposite?
+</details>
+
+<details class="qa-item">
+<summary>11. `DELETE` faster than `TRUNCATE` team expected — opposite?</summary>
 
 **Root cause.** TRUNCATE is fast but takes AccessExclusive lock (PG) / DDL lock; blocked by long tx. DELETE row-by-row slow but row locks only.
 
@@ -1400,7 +2351,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 12. Connection count 800 but only 20 app instances?
+</details>
+
+<details class="qa-item">
+<summary>12. Connection count 800 but only 20 app instances?</summary>
 
 **Root cause.** Pool misconfigured 40 each; connection leak; pgbouncer not used; health checks opening new connections.
 
@@ -1408,7 +2362,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 13. Window function duplicate rows in report?
+</details>
+
+<details class="qa-item">
+<summary>13. Window function duplicate rows in report?</summary>
 
 **Root cause.** Join before window multiplied rows; partition key wrong.
 
@@ -1416,7 +2373,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 14. Partial index not used by planner?
+</details>
+
+<details class="qa-item">
+<summary>14. Partial index not used by planner?</summary>
 
 **Root cause.** Query predicate doesn't match index WHERE clause exactly; parameter type mismatch; stale stats.
 
@@ -1424,7 +2384,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 15. Sharded by user_id — cross-user report impossible?
+</details>
+
+<details class="qa-item">
+<summary>15. Sharded by user_id — cross-user report impossible?</summary>
 
 **Root cause.** No single query path across shards.
 
@@ -1432,7 +2395,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 16. Liquibase rollback failed mid-deploy?
+</details>
+
+<details class="qa-item">
+<summary>16. Liquibase rollback failed mid-deploy?</summary>
 
 **Root cause.** Rollback script untested; data-dependent; DDL irreversible (DROP COLUMN).
 
@@ -1440,7 +2406,10 @@ When a database incident is "random," it is usually **locks**, **plan regression
 
 ---
 
-### 17. `OR` condition prevents index use?
+</details>
+
+<details class="qa-item">
+<summary>17. `OR` condition prevents index use?</summary>
 
 **Root cause.** Optimizer can't merge single index scan efficiently.
 
@@ -1454,7 +2423,10 @@ SELECT id FROM orders WHERE customer_id = 1 AND priority = 'urgent';
 
 ---
 
-### 18. Hot row updated 1000/sec — throughput ceiling?
+</details>
+
+<details class="qa-item">
+<summary>18. Hot row updated 1000/sec — throughput ceiling?</summary>
 
 **Root cause.** Row-level serialization; single lock on counter/status row.
 
@@ -1462,7 +2434,10 @@ SELECT id FROM orders WHERE customer_id = 1 AND priority = 'urgent';
 
 ---
 
-### 19. JSONB query slow without index?
+</details>
+
+<details class="qa-item">
+<summary>19. JSONB query slow without index?</summary>
 
 **Root cause.** `payload->>'status' = 'active'` seq scans entire table.
 
@@ -1476,7 +2451,10 @@ CREATE INDEX idx_events_payload ON events USING GIN (payload jsonb_path_ops);
 
 ---
 
-### 20. MySQL ONLY_FULL_GROUP_BY breaks legacy report?
+</details>
+
+<details class="qa-item">
+<summary>20. MySQL ONLY_FULL_GROUP_BY breaks legacy report?</summary>
 
 **Root cause.** SELECT lists non-aggregated columns not in GROUP BY — previously allowed loose mode.
 
@@ -1484,7 +2462,10 @@ CREATE INDEX idx_events_payload ON events USING GIN (payload jsonb_path_ops);
 
 ---
 
-### 21. Prepared statement plan wrong after data distribution shift?
+</details>
+
+<details class="qa-item">
+<summary>21. Prepared statement plan wrong after data distribution shift?</summary>
 
 **Root cause.** Generic plan cached for parameter values that no longer match statistics (PG `plan_cache_mode`, MySQL plan cache). One popular `status='pending'` went from 1% to 40% of rows.
 
@@ -1492,11 +2473,16 @@ CREATE INDEX idx_events_payload ON events USING GIN (payload jsonb_path_ops);
 
 ---
 
-### 22. Citus / Vitess migration — global sequences exhausted?
+</details>
+
+<details class="qa-item">
+<summary>22. Citus / Vitess migration — global sequences exhausted?</summary>
 
 **Root cause.** Sharded DB can't use single `SERIAL` — duplicate ids across shards.
 
 **Fix.** Snowflake/UUID keys; or per-shard sequence ranges allocated by coordinator; never rely on auto-increment alone cross-shard.
+
+</details>
 
 ---
 

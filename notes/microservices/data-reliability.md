@@ -17,7 +17,6 @@ PostgreSQL 15+ / MySQL 8+ / Spring Data JPA / Hibernate 6.x / Kafka 3.x. Distrib
 9. [Combining Patterns — End-to-End Reliability](#9-combining-patterns-end-to-end-reliability)
 10. [Production Debugging Playbook](#10-production-debugging-playbook)
 11. [Quick Decision Matrix](#11-quick-decision-matrix)
-12. [Interview Q&A — 20 Senior Questions](#12-interview-qa-20-senior-questions)
 
 ---
 
@@ -1405,107 +1404,182 @@ Actuator / metrics to watch: `idempotency_cache_hit`, `optimistic_lock_conflicts
 
 ---
 
-## 12. Interview Q&A — 20 Senior Questions
+## Practice Questions & Answers
 
-### Q1. What is data reconciliation and when do you run it?
+<details class="qa-item">
+<summary>1. What is data reconciliation and when do you run it?</summary>
 
-**Answer.** Data reconciliation compares two data sources that should agree — e.g., order totals vs payment captures, inventory vs WMS — to detect **drift**. Run it on a **schedule** (nightly incremental with watermarks), **continuously** for high-risk domains (money, inventory), and **after** bulk imports or migrations. Output is a discrepancy report; correction is a separate repair step. Reconciliation is read-only detection; it should not blindly mutate data.
+Data reconciliation compares two data sources that should agree — e.g., order totals vs payment captures, inventory vs WMS — to detect **drift**. Run it on a **schedule** (nightly incremental with watermarks), **continuously** for high-risk domains (money, inventory), and **after** bulk imports or migrations. Output is a discrepancy report; correction is a separate repair step. Reconciliation is read-only detection; it should not blindly mutate data.
 
-### Q2. How is data repair different from reconciliation?
+</details>
 
-**Answer.** **Reconciliation detects** mismatches. **Data repair corrects** them through controlled, audited mutations — backfill, compensating transactions, projection rebuilds. Repair requires tickets, idempotency, dry-run capability, and post-repair verification. Never repair money without approval and compensating entries instead of deletes.
+<details class="qa-item">
+<summary>2. How is data repair different from reconciliation?</summary>
 
-### Q3. When would you replay events and what are the risks?
+**Reconciliation detects** mismatches. **Data repair corrects** them through controlled, audited mutations — backfill, compensating transactions, projection rebuilds. Repair requires tickets, idempotency, dry-run capability, and post-repair verification. Never repair money without approval and compensating entries instead of deletes.
 
-**Answer.** Replay when the **event log is correct** but **derived state is wrong** — projection bug, new consumer, schema migration. Risks: **duplicate side effects** (emails, charges), **DB overload**, **non-idempotent handlers** creating duplicates, **retention expiry** losing events. Mitigate with new consumer groups, rate limits, shadow tables, replay context flags, and idempotent handlers.
+</details>
 
-### Q4. Explain idempotency keys for HTTP APIs.
+<details class="qa-item">
+<summary>3. When would you replay events and what are the risks?</summary>
 
-**Answer.** Client sends `Idempotency-Key` unique per logical operation. Server stores `key → (status, response)` before executing. Retries with same key return cached response without re-running side effects. Must handle `IN_PROGRESS` for concurrent duplicates, TTL ≥ client retry window, and reject same key with different payload (409). Stripe popularized 24h TTL model.
+Replay when the **event log is correct** but **derived state is wrong** — projection bug, new consumer, schema migration. Risks: **duplicate side effects** (emails, charges), **DB overload**, **non-idempotent handlers** creating duplicates, **retention expiry** losing events. Mitigate with new consumer groups, rate limits, shadow tables, replay context flags, and idempotent handlers.
 
-### Q5. How do you implement consumer idempotency for Kafka?
+</details>
 
-**Answer.** Store processed message IDs in a table with primary key `event_id`. On consume: `INSERT ... ON CONFLICT DO NOTHING`; proceed only if insert succeeded. Alternatively use natural business keys with UPSERT. This is separate from Kafka's idempotent producer — you need **both** for end-to-end safety. Trim table by retention policy or archive.
+<details class="qa-item">
+<summary>4. Explain idempotency keys for HTTP APIs.</summary>
 
-### Q6. Optimistic vs pessimistic locking — how do you choose?
+Client sends `Idempotency-Key` unique per logical operation. Server stores `key → (status, response)` before executing. Retries with same key return cached response without re-running side effects. Must handle `IN_PROGRESS` for concurrent duplicates, TTL ≥ client retry window, and reject same key with different payload (409). Stripe popularized 24h TTL model.
 
-**Answer.** **Optimistic** (`@Version`): high read/write ratio, low collision rate, can retry on conflict — order metadata, profile updates. **Pessimistic** (`FOR UPDATE`): hot rows, strong correctness requirement, short transactions — inventory decrements, seat booking, ledger transfers. Often combine: atomic SQL for counters, optimistic for everything else. Wrong choice on hot rows causes retry storms or overselling.
+</details>
 
-### Q7. What is the lost update problem?
+<details class="qa-item">
+<summary>5. How do you implement consumer idempotency for Kafka?</summary>
 
-**Answer.** Two transactions read the same value, both modify independently, second commit **overwrites** first — first update lost. Classic read-modify-write race. Fixed by locking, optimistic version check, or atomic operations (`SET x = x + 10`). Idempotency does **not** fix lost updates; that's concurrency control.
+Store processed message IDs in a table with primary key `event_id`. On consume: `INSERT ... ON CONFLICT DO NOTHING`; proceed only if insert succeeded. Alternatively use natural business keys with UPSERT. This is separate from Kafka's idempotent producer — you need **both** for end-to-end safety. Trim table by retention policy or archive.
 
-### Q8. Does idempotency solve lost updates?
+</details>
 
-**Answer.** **No.** Idempotency ensures repeating the **same operation** has one effect. Lost update is two **different** operations interleaving on the same data. You need `@Version`, `FOR UPDATE`, atomic updates, or merge semantics. Both patterns are often required in the same system for different failure modes.
+<details class="qa-item">
+<summary>6. Optimistic vs pessimistic locking — how do you choose?</summary>
 
-### Q9. How do you replay Kafka without affecting live consumers?
+**Optimistic** (`@Version`): high read/write ratio, low collision rate, can retry on conflict — order metadata, profile updates. **Pessimistic** (`FOR UPDATE`): hot rows, strong correctness requirement, short transactions — inventory decrements, seat booking, ledger transfers. Often combine: atomic SQL for counters, optimistic for everything else. Wrong choice on hot rows causes retry storms or overselling.
 
-**Answer.** Create a **new consumer group** with offsets reset to start timestamp or `earliest`. Deploy separate replay consumer instances writing to shadow table or using idempotent UPSERT. **Never reset** the live production group's offsets during traffic. Rate limit replay; monitor DB load; verify with reconciliation before cutover.
+</details>
 
-### Q10. What side effects must you gate during replay?
+<details class="qa-item">
+<summary>7. What is the lost update problem?</summary>
 
-**Answer.** **External I/O:** payment charges, refunds, emails, SMS, webhooks, shipping label creation, CRM creates. Gate with replay header flag, dedicated consumer group detection, or separate integration topic. **Internal idempotent writes** (UPSERT projections) are safe. Rule: replay should re-derive state, not re-trigger the world.
+Two transactions read the same value, both modify independently, second commit **overwrites** first — first update lost. Classic read-modify-write race. Fixed by locking, optimistic version check, or atomic operations (`SET x = x + 10`). Idempotency does **not** fix lost updates; that's concurrency control.
 
-### Q11. Describe a reconciliation job design for order vs payment.
+</details>
 
-**Answer.** Incremental watermark on `orders.updated_at`. For each batch, fetch payment service snapshot by `orderId`. Compare amounts with tolerance (currency rounding). Upsert discrepancies with severity. Alert on new P1 money deltas. Do not auto-fix — finance triage. Cross-check event existence: `PaymentCaptured` for paid orders. Store both values and detection time for audit.
+<details class="qa-item">
+<summary>8. Does idempotency solve lost updates?</summary>
 
-### Q12. How do you repair a double charge?
+**No.** Idempotency ensures repeating the **same operation** has one effect. Lost update is two **different** operations interleaving on the same data. You need `@Version`, `FOR UPDATE`, atomic updates, or merge semantics. Both patterns are often required in the same system for different failure modes.
 
-**Answer.** Identify duplicate gateway charge IDs for same order. Call gateway **refund** on duplicate with repair-scoped idempotency key. Post **compensating ledger entry**. Audit with repair ticket ID. Never delete charge rows. Notify customer if needed. Re-run reconciliation to confirm zero delta. Fix root cause: missing idempotency key on charge API.
+</details>
 
-### Q13. What is optimistic lock retry strategy?
+<details class="qa-item">
+<summary>9. How do you replay Kafka without affecting live consumers?</summary>
 
-**Answer.** On `OptimisticLockException`: reload entity with fresh version, reapply business logic (or fail if business rule violated), retry limited times (3-5) with exponential backoff and jitter. Expose version to clients via ETag for proactive conflict avoidance. Do not infinite retry on hot rows — switch to atomic or pessimistic strategy.
+Create a **new consumer group** with offsets reset to start timestamp or `earliest`. Deploy separate replay consumer instances writing to shadow table or using idempotent UPSERT. **Never reset** the live production group's offsets during traffic. Rate limit replay; monitor DB load; verify with reconciliation before cutover.
 
-### Q14. How do you prevent deadlocks with pessimistic locking?
+</details>
 
-**Answer.** **Consistent lock ordering** — always lock rows in sorted ID order on multi-row updates. Keep transactions **short** — no external API inside lock. Set **lock timeout** (`lock_timeout`, JPA `jakarta.persistence.lock.timeout`). Retry deadlocks (PostgreSQL error `40P01`). Consider `SKIP LOCKED` for queue workers, not checkout.
+<details class="qa-item">
+<summary>10. What side effects must you gate during replay?</summary>
 
-### Q15. What is natural idempotency? Examples?
+**External I/O:** payment charges, refunds, emails, SMS, webhooks, shipping label creation, CRM creates. Gate with replay header flag, dedicated consumer group detection, or separate integration topic. **Internal idempotent writes** (UPSERT projections) are safe. Rule: replay should re-derive state, not re-trigger the world.
 
-**Answer.** Operations that are idempotent by semantics without explicit keys: `PUT` absolute replacement to same value, `DELETE` twice, `UPDATE balance SET x = 100 WHERE id = 1` (absolute set), `INSERT ON CONFLICT DO UPDATE` with stable key, `UPDATE qty = qty - 1 WHERE qty >= 1`. Prefer these for counters over read-modify-write.
+</details>
 
-### Q16. How does `@Version` work in JPA?
+<details class="qa-item">
+<summary>11. Describe a reconciliation job design for order vs payment.</summary>
 
-**Answer.** Hibernate adds `version` column. On update: `SET ..., version = version + 1 WHERE id = ? AND version = ?`. If another transaction incremented version first, update affects 0 rows → `OptimisticLockException`. Works on flush for dirty entities. Requires version exposed to clients for conflict handling in APIs.
+Incremental watermark on `orders.updated_at`. For each batch, fetch payment service snapshot by `orderId`. Compare amounts with tolerance (currency rounding). Upsert discrepancies with severity. Alert on new P1 money deltas. Do not auto-fix — finance triage. Cross-check event existence: `PaymentCaptured` for paid orders. Store both values and detection time for audit.
 
-### Q17. Lost update in microservices without shared transactions?
+</details>
 
-**Answer.** Each service owns its data; cross-service lost update becomes **event ordering** and **eventual consistency** issues. Prevent with: single writer per aggregate, event versioning (`expectedVersion`), idempotent event handlers, saga orchestration, and reconciliation between services. Avoid two services writing same row — bounded context violation.
+<details class="qa-item">
+<summary>12. How do you repair a double charge?</summary>
 
-### Q18. What invariants catch lost updates in production?
+Identify duplicate gateway charge IDs for same order. Call gateway **refund** on duplicate with repair-scoped idempotency key. Post **compensating ledger entry**. Audit with repair ticket ID. Never delete charge rows. Notify customer if needed. Re-run reconciliation to confirm zero delta. Fix root cause: missing idempotency key on charge API.
 
-**Answer.** Scheduled SQL checks: non-negative inventory, status machine valid transitions, ledger debits = credits, sum(line items) = order total. Anomaly detection on reconciliation delta **growth rate**. Business reports that "don't add up" are often first signal. Invariants complement locking — they don't replace it.
+</details>
 
-### Q19. Compare shadow replay vs in-place replay.
+<details class="qa-item">
+<summary>13. What is optimistic lock retry strategy?</summary>
 
-**Answer.** **Shadow:** write to alternate table/topic; compare hashes; swap when verified — safer, needs storage, cutover step. **In-place:** UPSERT into live table with idempotent handler — faster, riskier if handler not fully idempotent or side effects leak. Use shadow for large rebuilds; in-place for small targeted forward replay with proven handlers.
+On `OptimisticLockException`: reload entity with fresh version, reapply business logic (or fail if business rule violated), retry limited times (3-5) with exponential backoff and jitter. Expose version to clients via ETag for proactive conflict avoidance. Do not infinite retry on hot rows — switch to atomic or pessimistic strategy.
 
-### Q20. What metrics and alerts for data reliability?
+</details>
 
-**Answer.** `reconciliation_discrepancies_new` (by severity), `repair_jobs_failed`, `optimistic_lock_conflict_rate`, `idempotency_in_progress_stale`, `consumer_duplicate_skipped_rate`, `lock_wait_p99`, `replay_lag`, `processed_events_insert_conflict_rate`. Alert P1 money discrepancies > 0 new per hour. Lag recovery < retention window.
+<details class="qa-item">
+<summary>14. How do you prevent deadlocks with pessimistic locking?</summary>
 
-### Q21. How do you handle idempotency key + IN_PROGRESS stuck state?
+**Consistent lock ordering** — always lock rows in sorted ID order on multi-row updates. Keep transactions **short** — no external API inside lock. Set **lock timeout** (`lock_timeout`, JPA `jakarta.persistence.lock.timeout`). Retry deadlocks (PostgreSQL error `40P01`). Consider `SKIP LOCKED` for queue workers, not checkout.
 
-**Answer.** Worker crashed after marking IN_PROGRESS. Client gets 409. **Stale lock sweeper** job deletes or marks FAILED after timeout (5-15 min). Client retries. Alternative: PostgreSQL advisory lock released automatically on connection drop. Document client retry policy. Monitor stale IN_PROGRESS count.
+</details>
 
-### Q22. Event replay vs CDC re-sync — when which?
+<details class="qa-item">
+<summary>15. What is natural idempotency? Examples?</summary>
 
-**Answer.** **Event replay** when domain events are the canonical history and handlers are deterministic. **CDC re-sync** (Debezium snapshot) when you need raw table state replication to warehouse/search index without business handler logic. CDC is table-level; replay is semantics-level. Often both: CDC for analytics, replay for fixing application projections.
+Operations that are idempotent by semantics without explicit keys: `PUT` absolute replacement to same value, `DELETE` twice, `UPDATE balance SET x = 100 WHERE id = 1` (absolute set), `INSERT ON CONFLICT DO UPDATE` with stable key, `UPDATE qty = qty - 1 WHERE qty >= 1`. Prefer these for counters over read-modify-write.
 
-### Q23. How would you explain data reliability to a junior in one minute?
+</details>
 
-**Answer.** "Messages arrive twice, users click twice, two people edit at once, and services get out of sync. **Idempotency** makes duplicates harmless. **Locking** stops concurrent overwrites. **Reconciliation** finds mismatches. **Repair** fixes them safely with audit. **Replay** rebuilds from the event log when code was wrong. Design for at-least-once, prove your data can survive it."
+<details class="qa-item">
+<summary>16. How does `@Version` work in JPA?</summary>
 
-### Q24. Production incident: would you replay or repair 10,000 wrong rows?
+Hibernate adds `version` column. On update: `SET ..., version = version + 1 WHERE id = ? AND version = ?`. If another transaction incremented version first, update affects 0 rows → `OptimisticLockException`. Works on flush for dirty entities. Requires version exposed to clients for conflict handling in APIs.
 
-**Answer.** If a **systematic handler bug** caused all 10,000: fix code, **replay** affected event range (shadow first, idempotent). If **random one-off** drift from event loss: **repair** individually from event store backfill. If mixed: replay for the 9,800 with common pattern; repair tickets for 200 edge cases. Always reconcile before closing incident.
+</details>
 
-### Q25. What is the relationship between transactional outbox and replay?
+<details class="qa-item">
+<summary>17. Lost update in microservices without shared transactions?</summary>
 
-**Answer.** Outbox ensures events **exist** reliably after DB commit — the relay may duplicate publish, so consumers still need dedup. Outbox table is an additional **replay source** if Kafka retention expired — you can re-publish from outbox archive. Outbox does not replace idempotent consumers or reconciliation; it fixes the dual-write problem on the producer side.
+Each service owns its data; cross-service lost update becomes **event ordering** and **eventual consistency** issues. Prevent with: single writer per aggregate, event versioning (`expectedVersion`), idempotent event handlers, saga orchestration, and reconciliation between services. Avoid two services writing same row — bounded context violation.
+
+</details>
+
+<details class="qa-item">
+<summary>18. What invariants catch lost updates in production?</summary>
+
+Scheduled SQL checks: non-negative inventory, status machine valid transitions, ledger debits = credits, sum(line items) = order total. Anomaly detection on reconciliation delta **growth rate**. Business reports that "don't add up" are often first signal. Invariants complement locking — they don't replace it.
+
+</details>
+
+<details class="qa-item">
+<summary>19. Compare shadow replay vs in-place replay.</summary>
+
+**Shadow:** write to alternate table/topic; compare hashes; swap when verified — safer, needs storage, cutover step. **In-place:** UPSERT into live table with idempotent handler — faster, riskier if handler not fully idempotent or side effects leak. Use shadow for large rebuilds; in-place for small targeted forward replay with proven handlers.
+
+</details>
+
+<details class="qa-item">
+<summary>20. What metrics and alerts for data reliability?</summary>
+
+`reconciliation_discrepancies_new` (by severity), `repair_jobs_failed`, `optimistic_lock_conflict_rate`, `idempotency_in_progress_stale`, `consumer_duplicate_skipped_rate`, `lock_wait_p99`, `replay_lag`, `processed_events_insert_conflict_rate`. Alert P1 money discrepancies > 0 new per hour. Lag recovery < retention window.
+
+</details>
+
+<details class="qa-item">
+<summary>21. How do you handle idempotency key + IN_PROGRESS stuck state?</summary>
+
+Worker crashed after marking IN_PROGRESS. Client gets 409. **Stale lock sweeper** job deletes or marks FAILED after timeout (5-15 min). Client retries. Alternative: PostgreSQL advisory lock released automatically on connection drop. Document client retry policy. Monitor stale IN_PROGRESS count.
+
+</details>
+
+<details class="qa-item">
+<summary>22. Event replay vs CDC re-sync — when which?</summary>
+
+**Event replay** when domain events are the canonical history and handlers are deterministic. **CDC re-sync** (Debezium snapshot) when you need raw table state replication to warehouse/search index without business handler logic. CDC is table-level; replay is semantics-level. Often both: CDC for analytics, replay for fixing application projections.
+
+</details>
+
+<details class="qa-item">
+<summary>23. How would you explain data reliability to a junior in one minute?</summary>
+
+"Messages arrive twice, users click twice, two people edit at once, and services get out of sync. **Idempotency** makes duplicates harmless. **Locking** stops concurrent overwrites. **Reconciliation** finds mismatches. **Repair** fixes them safely with audit. **Replay** rebuilds from the event log when code was wrong. Design for at-least-once, prove your data can survive it."
+
+</details>
+
+<details class="qa-item">
+<summary>24. Production incident: would you replay or repair 10,000 wrong rows?</summary>
+
+If a **systematic handler bug** caused all 10,000: fix code, **replay** affected event range (shadow first, idempotent). If **random one-off** drift from event loss: **repair** individually from event store backfill. If mixed: replay for the 9,800 with common pattern; repair tickets for 200 edge cases. Always reconcile before closing incident.
+
+</details>
+
+<details class="qa-item">
+<summary>25. What is the relationship between transactional outbox and replay?</summary>
+
+Outbox ensures events **exist** reliably after DB commit — the relay may duplicate publish, so consumers still need dedup. Outbox table is an additional **replay source** if Kafka retention expired — you can re-publish from outbox archive. Outbox does not replace idempotent consumers or reconciliation; it fixes the dual-write problem on the producer side.
+
+</details>
 
 ---
 

@@ -24,7 +24,6 @@ Spring Cache / Spring Data Redis / Redis 7.x / Spring Boot 3.x. Servlet and reac
 16. [Testing Cache Configuration](#16-testing-cache-configuration)
 17. [Production Debugging Playbook](#17-production-debugging-playbook)
 18. [Quick Decision Matrix](#18-quick-decision-matrix)
-19. [Interview Q&A](#19-interview-qa)
 
 ---
 
@@ -1833,119 +1832,203 @@ When "data is wrong" or "Redis is slow," work through this list before restartin
 
 ---
 
-## 19. Interview Q&A
+## Practice Questions & Answers
 
-### Q1. What is cache-aside and how does it differ from read-through?
+<details class="qa-item">
+<summary>1. What is cache-aside and how does it differ from read-through?</summary>
 
-**A.** Cache-aside: the application checks cache, on miss loads from DB and populates cache. Read-through: the cache library loads from DB on miss — application only talks to cache. Spring `@Cacheable` is cache-aside — the annotated method is the loader invoked on miss.
+Cache-aside: the application checks cache, on miss loads from DB and populates cache. Read-through: the cache library loads from DB on miss — application only talks to cache. Spring `@Cacheable` is cache-aside — the annotated method is the loader invoked on miss.
 
-### Q2. When would you use write-through vs write-behind?
+</details>
 
-**A.** Write-through: synchronous write to cache and DB — use when you need durability and can accept write latency (inventory sync with careful ordering). Write-behind: async DB flush — use for high-write non-critical data (analytics, view counts) where brief loss on crash is acceptable.
+<details class="qa-item">
+<summary>2. When would you use write-through vs write-behind?</summary>
 
-### Q3. How do you invalidate cache in a microservices architecture?
+Write-through: synchronous write to cache and DB — use when you need durability and can accept write latency (inventory sync with careful ordering). Write-behind: async DB flush — use for high-write non-critical data (analytics, view counts) where brief loss on crash is acceptable.
 
-**A.** TTL as safety net; explicit `@CacheEvict` or `DEL` on every write path in owning service; domain events (Kafka) for cross-service eviction; version bump in key namespace for bulk logical invalidation; pub/sub for L1 invalidation across pods.
+</details>
 
-### Q4. What is cache stampede and how do you prevent it?
+<details class="qa-item">
+<summary>3. How do you invalidate cache in a microservices architecture?</summary>
 
-**A.** Many concurrent requests miss the same hot key and overload the origin. Prevention: single-flight/request coalescing, distributed lock on populate, TTL jitter, stale-while-revalidate, pre-warming, circuit breaker on origin.
+TTL as safety net; explicit `@CacheEvict` or `DEL` on every write path in owning service; domain events (Kafka) for cross-service eviction; version bump in key namespace for bulk logical invalidation; pub/sub for L1 invalidation across pods.
 
-### Q5. Explain Redis eviction policies. Which for pure cache?
+</details>
 
-**A.** When `maxmemory` reached: `volatile-lru` evicts LRU keys with TTL; `allkeys-lru` evicts any key LRU; `volatile-ttl` evicts shortest TTL; `noeviction` returns errors. Pure cache: `allkeys-lru` with TTL on all keys, or `volatile-lru` if every key has TTL.
+<details class="qa-item">
+<summary>4. What is cache stampede and how do you prevent it?</summary>
 
-### Q6. How does `@Cacheable` work internally in Spring?
+Many concurrent requests miss the same hot key and overload the origin. Prevention: single-flight/request coalescing, distributed lock on populate, TTL jitter, stale-while-revalidate, pre-warming, circuit breaker on origin.
 
-**A.** AOP `CacheInterceptor` around proxied bean methods. Computes key via SpEL, `Cache.get(key)` — on hit returns without invoking method; on miss invokes method, `Cache.put(key, result)` unless `unless` prevents it.
+</details>
 
-### Q7. Why doesn't `@Cacheable` work on self-invocation?
+<details class="qa-item">
+<summary>5. Explain Redis eviction policies. Which for pure cache?</summary>
 
-**A.** Spring AOP uses proxies. Calling `this.findById()` from within the same class bypasses the proxy — no interceptor runs. Fix: inject self, move to another bean, or use AspectJ compile-time weaving.
+When `maxmemory` reached: `volatile-lru` evicts LRU keys with TTL; `allkeys-lru` evicts any key LRU; `volatile-ttl` evicts shortest TTL; `noeviction` returns errors. Pure cache: `allkeys-lru` with TTL on all keys, or `volatile-lru` if every key has TTL.
 
-### Q8. What happens if you cache null results?
+</details>
 
-**A.** By default Spring Cache may cache null (protects against repeated misses for non-existent keys). Use `unless = "#result == null"` to skip, or `disableCachingNullValues()` in Redis config. Cached null causes confusion if row later created — use short TTL or negative-cache sentinel with eviction on create.
+<details class="qa-item">
+<summary>6. How does `@Cacheable` work internally in Spring?</summary>
 
-### Q9. Redis Cluster vs Sentinel — when to use which?
+AOP `CacheInterceptor` around proxied bean methods. Computes key via SpEL, `Cache.get(key)` — on hit returns without invoking method; on miss invokes method, `Cache.put(key, result)` unless `unless` prevents it.
 
-**A.** Sentinel: single primary, automatic failover, vertical scale, simpler client. Cluster: sharded data across masters, horizontal scale, needed for large datasets/high throughput. Spring Cache `allEntries` eviction is harder on cluster — consider hash tags or standalone.
+</details>
 
-### Q10. How do you ensure cache consistency with database transactions?
+<details class="qa-item">
+<summary>7. Why doesn't `@Cacheable` work on self-invocation?</summary>
 
-**A.** Update DB first, evict/update cache after commit (`@TransactionalEventListener(AFTER_COMMIT)` or `transactionAware()` CacheManager). Never update cache before commit. For read-your-writes, evict on same user's write immediately.
+Spring AOP uses proxies. Calling `this.findById()` from within the same class bypasses the proxy — no interceptor runs. Fix: inject self, move to another bean, or use AspectJ compile-time weaving.
 
-### Q11. What are the risks of sharing Redis between services?
+</details>
 
-**A.** Key collisions, accidental `FLUSHDB`, schema coupling via shared key formats, security boundary blur, noisy neighbor memory pressure. Prefer logical separation: key prefixes, database indexes, or separate clusters.
+<details class="qa-item">
+<summary>8. What happens if you cache null results?</summary>
 
-### Q12. L1 + L2 caching — what invalidation strategy?
+By default Spring Cache may cache null (protects against repeated misses for non-existent keys). Use `unless = "#result == null"` to skip, or `disableCachingNullValues()` in Redis config. Cached null causes confusion if row later created — use short TTL or negative-cache sentinel with eviction on create.
 
-**A.** On write: evict/update L2, publish invalidation event for L1 on all pods. TTL on L1 shorter than L2. Never evict L2 only — L1 serves stale until its TTL expires.
+</details>
 
-### Q13. How do you choose TTL?
+<details class="qa-item">
+<summary>9. Redis Cluster vs Sentinel — when to use which?</summary>
 
-**A.** Balance staleness tolerance vs hit ratio vs memory. Start with business SLA ("price can be 60s old"), add jitter, measure miss rate and staleness complaints. Hot static data: longer TTL + event invalidation. Volatile data: short TTL or no cache.
+Sentinel: single primary, automatic failover, vertical scale, simpler client. Cluster: sharded data across masters, horizontal scale, needed for large datasets/high throughput. Spring Cache `allEntries` eviction is harder on cluster — consider hash tags or standalone.
 
-### Q14. What serialization format for Redis in Java?
+</details>
 
-**A.** Avoid JDK serialization in prod — brittle and opaque. Prefer JSON (`GenericJackson2JsonRedisSerializer`) with typed DTOs, or Kryo/protobuf for performance. Never enable Jackson default typing without understanding deserialization security risks.
+<details class="qa-item">
+<summary>10. How do you ensure cache consistency with database transactions?</summary>
 
-### Q15. How does `sync=true` on `@Cacheable` help?
+Update DB first, evict/update cache after commit (`@TransactionalEventListener(AFTER_COMMIT)` or `transactionAware()` CacheManager). Never update cache before commit. For read-your-writes, evict on same user's write immediately.
 
-**A.** For a given key, only one thread executes the method while others wait — built-in single-flight for that cache provider. Supported meaningfully when backed by Redis (Redisson) or concurrent map; verify provider docs. Reduces stampede on hot key miss.
+</details>
 
-### Q16. Difference between `@CachePut` and `@CacheEvict` + `@Cacheable`?
+<details class="qa-item">
+<summary>11. What are the risks of sharing Redis between services?</summary>
 
-**A.** `@CachePut` always runs method and puts result in cache — use for forced refresh. `@CacheEvict` removes entries — use on writes. `@Cacheable` skips method on hit — use for reads. Don't `@CachePut` on create until all key fields (like ID) exist.
+Key collisions, accidental `FLUSHDB`, schema coupling via shared key formats, security boundary blur, noisy neighbor memory pressure. Prefer logical separation: key prefixes, database indexes, or separate clusters.
 
-### Q17. How do you handle Redis failure in production?
+</details>
 
-**A.** Treat cache as optimization, not requirement. Catch connection exceptions, bypass to DB, log metric `cache.bypass`. Circuit-break Redis client after repeated failures to protect DB from stampede when Redis comes back. Sessions in Redis may require different failover strategy than object cache.
+<details class="qa-item">
+<summary>12. L1 + L2 caching — what invalidation strategy?</summary>
 
-### Q18. What is stale-while-revalidate?
+On write: evict/update L2, publish invalidation event for L1 on all pods. TTL on L1 shorter than L2. Never evict L2 only — L1 serves stale until its TTL expires.
 
-**A.** Serve slightly expired cached value immediately while asynchronously refreshing in background. Improves latency during revalidation window; user may see stale data within bounded window. HTTP `stale-while-revalidate` header is the CDN analog.
+</details>
 
-### Q19. Why is `KEYS *` dangerous in production?
+<details class="qa-item">
+<summary>13. How do you choose TTL?</summary>
 
-**A.** `KEYS` scans entire keyspace in single thread, blocking Redis — latency spikes for all clients. Use `SCAN` iteratively for admin tasks. Spring Cache evict-all uses SCAN in modern versions — verify.
+Balance staleness tolerance vs hit ratio vs memory. Start with business SLA ("price can be 60s old"), add jitter, measure miss rate and staleness complaints. Hot static data: longer TTL + event invalidation. Volatile data: short TTL or no cache.
 
-### Q20. How do you cache paginated query results?
+</details>
 
-**A.** Key = hash of query params including page, size, sort. Invalidation hard — any create/update may invalidate many pages. Options: short TTL, cache only first page, don't cache lists (cache entities by ID only), or `allEntries` evict on any write (expensive). Often better to cache search index (Elasticsearch) not SQL page results.
+<details class="qa-item">
+<summary>14. What serialization format for Redis in Java?</summary>
 
-### Q21. Explain thundering herd vs cache stampede.
+Avoid JDK serialization in prod — brittle and opaque. Prefer JSON (`GenericJackson2JsonRedisSerializer`) with typed DTOs, or Kryo/protobuf for performance. Never enable Jackson default typing without understanding deserialization security risks.
 
-**A.** Cache stampede is a subset: many misses on same key simultaneously. Thundering herd is broader synchronized behavior — TTL expiry alignment, cron jobs, circuit half-open probes, deploy cold start. Both fixed with jitter, single-flight, pre-warm, staggered schedules.
+</details>
 
-### Q22. Multi-tenant cache isolation?
+<details class="qa-item">
+<summary>15. How does `sync=true` on `@Cacheable` help?</summary>
 
-**A.** Include `tenantId` in every key (`tenant:42:product:7`). Never global shared keys for tenant data. Evict scoped to tenant on tenant-scoped writes. Test cross-tenant leakage explicitly.
+For a given key, only one thread executes the method while others wait — built-in single-flight for that cache provider. Supported meaningfully when backed by Redis (Redisson) or concurrent map; verify provider docs. Reduces stampede on hot key miss.
 
-### Q23. How would you cache a method that returns `Optional`?
+</details>
 
-**A.** `Optional` is serializable awkwardly — prefer `@Cacheable(unless = "#result.isEmpty()")` caching the inner value or null. Or return nullable type from cached layer. Be explicit about whether empty should be cached (negative cache).
+<details class="qa-item">
+<summary>16. Difference between `@CachePut` and `@CacheEvict` + `@Cacheable`?</summary>
 
-### Q24. What metrics prove caching is working?
+`@CachePut` always runs method and puts result in cache — use for forced refresh. `@CacheEvict` removes entries — use on writes. `@Cacheable` skips method on hit — use for reads. Don't `@CachePut` on create until all key fields (like ID) exist.
 
-**A.** High hit ratio on target cache name, reduced DB QPS/latency for cached endpoints, Redis GET latency stable, miss spikes only on deploy/TTL boundaries. Compare canary with cache disabled vs enabled.
+</details>
 
-### Q25. Design caching for an e-commerce product detail page.
+<details class="qa-item">
+<summary>17. How do you handle Redis failure in production?</summary>
 
-**A.** CDN for static assets. BFF or catalog-service caches product DTO in Redis (cache-aside, 5–10m TTL, event invalidation on catalog update). Inventory stock: separate short-TTL cache (30s) or no cache — call inventory API; evict on `StockChanged` event. L1 Caffeine for hottest SKUs. Single-flight on miss. Pre-warm before campaigns. Never cross-read inventory Redis from catalog service.
+Treat cache as optimization, not requirement. Catch connection exceptions, bypass to DB, log metric `cache.bypass`. Circuit-break Redis client after repeated failures to protect DB from stampede when Redis comes back. Sessions in Redis may require different failover strategy than object cache.
 
-### Q26. What is cache penetration vs cache breakdown vs cache avalanche?
+</details>
 
-**A.** **Penetration:** queries for non-existent keys bypass cache repeatedly — fix with negative caching (brief TTL for null), bloom filter. **Breakdown (stampede):** hot key expires, mass miss — single-flight, jitter. **Avalanche:** Redis down or mass expiry, DB overwhelmed — circuit breaker, degraded mode, tiered TTL, limit concurrency to origin.
+<details class="qa-item">
+<summary>18. What is stale-while-revalidate?</summary>
 
-### Q27. How does Redis single-threaded model affect cache design?
+Serve slightly expired cached value immediately while asynchronously refreshing in background. Improves latency during revalidation window; user may see stale data within bounded window. HTTP `stale-while-revalidate` header is the CDN analog.
 
-**A.** One CPU-bound thread per shard handles commands — very fast ops (GET/SET) scale to 100k+ ops/s per core. Slow commands (`KEYS`, big `SMEMBERS`, Lua long scripts) block all clients on that shard. Keep values small, avoid blocking commands, shard hot keys across cluster.
+</details>
 
-### Q28. `@CacheEvict(beforeInvocation=true)` vs false?
+<details class="qa-item">
+<summary>19. Why is `KEYS *` dangerous in production?</summary>
 
-**A.** `false` (default): evict after method succeeds — if method throws, cache unchanged. `true`: evict before — use when method failure should still clear stale data, or updating in place; risk if method fails after evict — next read loads old DB value into cache then method never updated DB.
+`KEYS` scans entire keyspace in single thread, blocking Redis — latency spikes for all clients. Use `SCAN` iteratively for admin tasks. Spring Cache evict-all uses SCAN in modern versions — verify.
+
+</details>
+
+<details class="qa-item">
+<summary>20. How do you cache paginated query results?</summary>
+
+Key = hash of query params including page, size, sort. Invalidation hard — any create/update may invalidate many pages. Options: short TTL, cache only first page, don't cache lists (cache entities by ID only), or `allEntries` evict on any write (expensive). Often better to cache search index (Elasticsearch) not SQL page results.
+
+</details>
+
+<details class="qa-item">
+<summary>21. Explain thundering herd vs cache stampede.</summary>
+
+Cache stampede is a subset: many misses on same key simultaneously. Thundering herd is broader synchronized behavior — TTL expiry alignment, cron jobs, circuit half-open probes, deploy cold start. Both fixed with jitter, single-flight, pre-warm, staggered schedules.
+
+</details>
+
+<details class="qa-item">
+<summary>22. Multi-tenant cache isolation?</summary>
+
+Include `tenantId` in every key (`tenant:42:product:7`). Never global shared keys for tenant data. Evict scoped to tenant on tenant-scoped writes. Test cross-tenant leakage explicitly.
+
+</details>
+
+<details class="qa-item">
+<summary>23. How would you cache a method that returns `Optional`?</summary>
+
+`Optional` is serializable awkwardly — prefer `@Cacheable(unless = "#result.isEmpty()")` caching the inner value or null. Or return nullable type from cached layer. Be explicit about whether empty should be cached (negative cache).
+
+</details>
+
+<details class="qa-item">
+<summary>24. What metrics prove caching is working?</summary>
+
+High hit ratio on target cache name, reduced DB QPS/latency for cached endpoints, Redis GET latency stable, miss spikes only on deploy/TTL boundaries. Compare canary with cache disabled vs enabled.
+
+</details>
+
+<details class="qa-item">
+<summary>25. Design caching for an e-commerce product detail page.</summary>
+
+CDN for static assets. BFF or catalog-service caches product DTO in Redis (cache-aside, 5–10m TTL, event invalidation on catalog update). Inventory stock: separate short-TTL cache (30s) or no cache — call inventory API; evict on `StockChanged` event. L1 Caffeine for hottest SKUs. Single-flight on miss. Pre-warm before campaigns. Never cross-read inventory Redis from catalog service.
+
+</details>
+
+<details class="qa-item">
+<summary>26. What is cache penetration vs cache breakdown vs cache avalanche?</summary>
+
+**Penetration:** queries for non-existent keys bypass cache repeatedly — fix with negative caching (brief TTL for null), bloom filter. **Breakdown (stampede):** hot key expires, mass miss — single-flight, jitter. **Avalanche:** Redis down or mass expiry, DB overwhelmed — circuit breaker, degraded mode, tiered TTL, limit concurrency to origin.
+
+</details>
+
+<details class="qa-item">
+<summary>27. How does Redis single-threaded model affect cache design?</summary>
+
+One CPU-bound thread per shard handles commands — very fast ops (GET/SET) scale to 100k+ ops/s per core. Slow commands (`KEYS`, big `SMEMBERS`, Lua long scripts) block all clients on that shard. Keep values small, avoid blocking commands, shard hot keys across cluster.
+
+</details>
+
+<details class="qa-item">
+<summary>28. `@CacheEvict(beforeInvocation=true)` vs false?</summary>
+
+`false` (default): evict after method succeeds — if method throws, cache unchanged. `true`: evict before — use when method failure should still clear stale data, or updating in place; risk if method fails after evict — next read loads old DB value into cache then method never updated DB.
+
+</details>
 
 ---
 

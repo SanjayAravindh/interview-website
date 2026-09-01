@@ -22,7 +22,6 @@ Spring Cloud Gateway / Kafka / Kubernetes / service mesh. Servlet and reactive s
 14. [Pattern Composition and Interaction](#14-pattern-composition-and-interaction)
 15. [Production Debugging Playbook](#15-production-debugging-playbook)
 16. [Quick Decision Matrix](#16-quick-decision-matrix)
-17. [Interview Q&A](#17-interview-qa)
 
 ---
 
@@ -1399,119 +1398,203 @@ When microservices "feel broken" after a pattern adoption, classify **which patt
 
 ---
 
-## 17. Interview Q&A
+## Practice Questions & Answers
 
-### Q1. What problem does an API Gateway solve that a load balancer does not?
+<details class="qa-item">
+<summary>1. What problem does an API Gateway solve that a load balancer does not?</summary>
 
-**A.** A load balancer distributes traffic at L4/L7 for health and capacity. An API Gateway adds **API-centric concerns**: authentication/authorization, rate limiting per client, request routing by path/header, protocol transformation, API versioning, and often developer-facing quotas. It is the **policy enforcement point** for external consumers, not just traffic spreading.
+A load balancer distributes traffic at L4/L7 for health and capacity. An API Gateway adds **API-centric concerns**: authentication/authorization, rate limiting per client, request routing by path/header, protocol transformation, API versioning, and often developer-facing quotas. It is the **policy enforcement point** for external consumers, not just traffic spreading.
 
-### Q2. When would you choose a BFF over exposing microservices directly to the client?
+</details>
 
-**A.** When the client needs **aggregated, shaped data** in one round trip (mobile on slow networks), **different contracts** per channel (web vs partner), or **UX-specific caching and pagination**. Avoid BFF when the client is another backend service — use direct API or events. Do not put core business invariants only in the BFF.
+<details class="qa-item">
+<summary>2. When would you choose a BFF over exposing microservices directly to the client?</summary>
 
-### Q3. Explain the Anti-Corruption Layer and give a production example.
+When the client needs **aggregated, shaped data** in one round trip (mobile on slow networks), **different contracts** per channel (web vs partner), or **UX-specific caching and pagination**. Avoid BFF when the client is another backend service — use direct API or events. Do not put core business invariants only in the BFF.
 
-**A.** ACL is a translation boundary between your domain model and an external/legacy model. Example: Payment service exposes `BillingPort.charge(Money)` internally; `MainframeBillingAdapter` maps to COBOL record layout, calls SOAP, maps response codes to domain `BillingReceipt`. Legacy field renames affect only the adapter, not Order or Checkout services.
+</details>
 
-### Q4. Saga vs 2PC — when do you pick each?
+<details class="qa-item">
+<summary>3. Explain the Anti-Corruption Layer and give a production example.</summary>
 
-**A.** Pick **2PC/XA** rarely — homogeneous databases, low latency tolerance, strong ops on coordinators. Pick **Saga** for microservices: long-running flows, heterogeneous stores, high availability. Saga trades atomicity for **eventual business consistency** with compensations and idempotency. Most checkout/order flows use saga + outbox, not 2PC.
+ACL is a translation boundary between your domain model and an external/legacy model. Example: Payment service exposes `BillingPort.charge(Money)` internally; `MainframeBillingAdapter` maps to COBOL record layout, calls SOAP, maps response codes to domain `BillingReceipt`. Legacy field renames affect only the adapter, not Order or Checkout services.
 
-### Q5. Choreography vs orchestration in sagas — trade-offs?
+</details>
 
-**A.** **Choreography:** services react to events; loose coupling; hard to visualize and debug; risk of cyclic dependencies. **Orchestration:** central coordinator drives steps; clear state machine; easier timeouts and compensations; coordinator must be highly available. Use orchestration for complex flows with many steps; choreography for simple publish-subscribe reactions.
+<details class="qa-item">
+<summary>4. Saga vs 2PC — when do you pick each?</summary>
 
-### Q6. What is CQRS and does it require Event Sourcing?
+Pick **2PC/XA** rarely — homogeneous databases, low latency tolerance, strong ops on coordinators. Pick **Saga** for microservices: long-running flows, heterogeneous stores, high availability. Saga trades atomicity for **eventual business consistency** with compensations and idempotency. Most checkout/order flows use saga + outbox, not 2PC.
 
-**A.** CQRS separates command (write) and query (read) models. Writes enforce invariants on normalized storage; reads serve denormalized projections optimized for queries. **No**, CQRS does not require Event Sourcing — projections can update from domain events, CDC, or even synchronous dual-write (less ideal). Event Sourcing is one way to persist writes as event streams.
+</details>
 
-### Q7. How do you handle read-your-writes with CQRS?
+<details class="qa-item">
+<summary>5. Choreography vs orchestration in sagas — trade-offs?</summary>
 
-**A.** Options: return created resource from command handler (write side DTO); client polls until read model version ≥ command version; short TTL route-to-write for GET-by-id after create; synchronous projection for critical path (adds latency). Product must define **acceptable staleness** — often 1–5 seconds for non-financial reads.
+**Choreography:** services react to events; loose coupling; hard to visualize and debug; risk of cyclic dependencies. **Orchestration:** central coordinator drives steps; clear state machine; easier timeouts and compensations; coordinator must be highly available. Use orchestration for complex flows with many steps; choreography for simple publish-subscribe reactions.
 
-### Q8. What is Event Sourcing and when would you avoid it?
+</details>
 
-**A.** Event Sourcing stores state as append-only events; current state is replay. Use when audit, temporal queries, and rebuildable projections justify operational cost. **Avoid** for simple CRUD, teams without experience, or when GDPR/immutability is poorly planned. Most systems need CQRS + outbox, not full ES.
+<details class="qa-item">
+<summary>6. What is CQRS and does it require Event Sourcing?</summary>
 
-### Q9. Explain the Transactional Outbox Pattern.
+CQRS separates command (write) and query (read) models. Writes enforce invariants on normalized storage; reads serve denormalized projections optimized for queries. **No**, CQRS does not require Event Sourcing — projections can update from domain events, CDC, or even synchronous dual-write (less ideal). Event Sourcing is one way to persist writes as event streams.
 
-**A.** In one local DB transaction, persist domain changes and an row in an `outbox` table. A relay (polling or CDC) publishes outbox rows to Kafka and marks them published. Guarantees you never commit business data without a corresponding message intent. Consumers must handle **at-least-once** delivery with idempotency.
+</details>
 
-### Q10. Outbox vs publishing to Kafka directly after DB commit?
+<details class="qa-item">
+<summary>7. How do you handle read-your-writes with CQRS?</summary>
 
-**A.** Direct publish after commit is a **dual write** — crash between commit and publish loses the message; publish success + DB rollback creates ghost events. Outbox makes DB write and message record **atomic**. Prefer outbox (or CDC from outbox table) for any event that triggers cross-service workflows.
+Options: return created resource from command handler (write side DTO); client polls until read model version ≥ command version; short TTL route-to-write for GET-by-id after create; synchronous projection for critical path (adds latency). Product must define **acceptable staleness** — often 1–5 seconds for non-financial reads.
 
-### Q11. Circuit breaker vs retry — how do they work together?
+</details>
 
-**A.** Retry handles **transient** failures on individual attempts (timeouts, 503). Circuit breaker stops **all attempts** when failure rate indicates dependency is down. Use retry (limited, idempotent) inside closed breaker; when OPEN, fail fast to fallback without retry storm. Never retry non-idempotent POST without idempotency keys.
+<details class="qa-item">
+<summary>8. What is Event Sourcing and when would you avoid it?</summary>
 
-### Q12. What is the bulkhead pattern and how is it different from circuit breaker?
+Event Sourcing stores state as append-only events; current state is replay. Use when audit, temporal queries, and rebuildable projections justify operational cost. **Avoid** for simple CRUD, teams without experience, or when GDPR/immutability is poorly planned. Most systems need CQRS + outbox, not full ES.
 
-**A.** Bulkhead **limits concurrent resources** (threads, connections) per dependency or workload. Circuit breaker **stops calls based on failure history**. Bulkhead prevents one slow dep from occupying all threads; breaker prevents calling a dep that is failing. Use both: bulkhead for isolation, breaker for fail-fast on unhealthy deps.
+</details>
 
-### Q13. Describe the Strangler Fig pattern migration steps.
+<details class="qa-item">
+<summary>9. Explain the Transactional Outbox Pattern.</summary>
 
-**A.** Place routing facade (gateway) in front of monolith; identify bounded context; build new service with ACL if needed; route slice of traffic (path or feature flag); sync data with single write leader and reconciliation; verify metrics; decommission monolith module. Repeat until monolith empty. Define **exit criteria** per slice to avoid permanent dual-run.
+In one local DB transaction, persist domain changes and an row in an `outbox` table. A relay (polling or CDC) publishes outbox rows to Kafka and marks them published. Guarantees you never commit business data without a corresponding message intent. Consumers must handle **at-least-once** delivery with idempotency.
 
-### Q14. Sidecar vs Ambassador — what is the difference?
+</details>
 
-**A.** **Sidecar** is a deployment pattern: helper container in same pod as app. **Ambassador** is a **role**: proxy handling outbound connectivity (auth, retry, pooling). An ambassador is often implemented as a sidecar, but not all sidecars are ambassadors (e.g. log shippers). API Gateway is inbound edge; ambassador is typically outbound helper.
+<details class="qa-item">
+<summary>10. Outbox vs publishing to Kafka directly after DB commit?</summary>
 
-### Q15. How does an API Gateway differ from a BFF in a typical architecture?
+Direct publish after commit is a **dual write** — crash between commit and publish loses the message; publish success + DB rollback creates ghost events. Outbox makes DB write and message record **atomic**. Prefer outbox (or CDC from outbox table) for any event that triggers cross-service workflows.
 
-**A.** Gateway serves **all clients** with infrastructure policies (TLS, auth, rate limit, routing). BFF serves **one client type** with product aggregation and DTO shaping. Common stack: Client → Gateway → BFF → services. Gateway should stay thin; BFF owns screen-specific composition.
+</details>
 
-### Q16. What are compensating transactions in a saga?
+<details class="qa-item">
+<summary>11. Circuit breaker vs retry — how do they work together?</summary>
 
-**A.** Semantic undo steps: release inventory, refund payment, cancel shipment. Compensations are **not always ACID undo** — email cannot be un-sent; use corrective action. Compensations must be **idempotent** and may fail — require reconciliation queues and human intervention for `COMPENSATION_FAILED` states.
+Retry handles **transient** failures on individual attempts (timeouts, 503). Circuit breaker stops **all attempts** when failure rate indicates dependency is down. Use retry (limited, idempotent) inside closed breaker; when OPEN, fail fast to fallback without retry storm. Never retry non-idempotent POST without idempotency keys.
 
-### Q17. How do you debug missing events in Kafka after a successful API call?
+</details>
 
-**A.** Check: (1) API returned 200 — write TX committed? (2) Outbox row exists with `published_at` null? → relay issue. (3) Published but no consumer? → consumer lag, wrong topic, ACL on broker. (4) Consumer errors? → DLQ, poison message. Trace `traceId` and `aggregate_id` across outbox and consumer logs.
+<details class="qa-item">
+<summary>12. What is the bulkhead pattern and how is it different from circuit breaker?</summary>
 
-### Q18. What is an anti-pattern when combining Gateway, BFF, and Saga?
+Bulkhead **limits concurrent resources** (threads, connections) per dependency or workload. Circuit breaker **stops calls based on failure history**. Bulkhead prevents one slow dep from occupying all threads; breaker prevents calling a dep that is failing. Use both: bulkhead for isolation, breaker for fail-fast on unhealthy deps.
 
-**A.** Implementing checkout saga as Gateway filter chaining HTTP calls — business orchestration at edge, untestable, wrong failure semantics. Correct: Gateway authenticates and routes to Order service or Checkout BFF; **saga lives in domain service** with persisted state and outbox.
+</details>
 
-### Q19. Event Sourcing: how do you handle schema evolution?
+<details class="qa-item">
+<summary>13. Describe the Strangler Fig pattern migration steps.</summary>
 
-**A.** Never mutate stored events. Version event types; implement **upcasters** that transform old events to new shape on read/replay; snapshot aggregates to limit replay chain; test replay in CI. Consider compacted topics separately from event store — different concerns.
+Place routing facade (gateway) in front of monolith; identify bounded context; build new service with ACL if needed; route slice of traffic (path or feature flag); sync data with single write leader and reconciliation; verify metrics; decommission monolith module. Repeat until monolith empty. Define **exit criteria** per slice to avoid permanent dual-run.
 
-### Q20. How would you size a bulkhead for a downstream HTTP dependency?
+</details>
 
-**A.** Load test peak **concurrent in-flight** calls (not RPS alone). Set `maxConcurrentCalls` ≈ measured peak × 1.3–1.5 with `maxWaitDuration` bounded. Monitor rejection rate and latency. Separate bulkheads for critical vs background workloads. Revisit after dependency SLA changes.
+<details class="qa-item">
+<summary>14. Sidecar vs Ambassador — what is the difference?</summary>
 
-### Q21. BFF partial failure — how should the UI behave?
+**Sidecar** is a deployment pattern: helper container in same pod as app. **Ambassador** is a **role**: proxy handling outbound connectivity (auth, retry, pooling). An ambassador is often implemented as a sidecar, but not all sidecars are ambassadors (e.g. log shippers). API Gateway is inbound edge; ambassador is typically outbound helper.
 
-**A.** Return 200 with **degraded payload** when optional sections fail (reviews unavailable) if product accepts; use circuit breaker fallbacks per section. Critical sections failing → 503 or partial 200 with clear `errors[]` and retry hints. Never fail entire product page because recommendations service is down unless recommendations are contractually required.
+</details>
 
-### Q22. When does CQRS add more harm than good?
+<details class="qa-item">
+<summary>15. How does an API Gateway differ from a BFF in a typical architecture?</summary>
 
-**A.** Low read/write traffic admin CRUD; tiny team without ops for projections; strong read-your-writes requirement without UX design; multiple overlapping projections without ownership. CQRS adds **lag, duplication, and operational surfaces** — need measurable read scaling or team scaling pain to justify.
+Gateway serves **all clients** with infrastructure policies (TLS, auth, rate limit, routing). BFF serves **one client type** with product aggregation and DTO shaping. Common stack: Client → Gateway → BFF → services. Gateway should stay thin; BFF owns screen-specific composition.
 
-### Q23. Explain idempotency in saga steps with an example.
+</details>
 
-**A.** Each step message carries `idempotencyKey`. Payment handler: if key processed, return previous result without re-charging. Example: client retries `ChargePayment` on timeout; second delivery sees existing key in `processed_commands` table, skips charge, still emits `PaymentCompleted` for saga progression (or returns stored outcome).
+<details class="qa-item">
+<summary>16. What are compensating transactions in a saga?</summary>
 
-### Q24. Service mesh sidecar vs library circuit breaker — trade-off?
+Semantic undo steps: release inventory, refund payment, cancel shipment. Compensations are **not always ACID undo** — email cannot be un-sent; use corrective action. Compensations must be **idempotent** and may fail — require reconciliation queues and human intervention for `COMPENSATION_FAILED` states.
 
-**A.** Sidecar/mesh: uniform policy, language-agnostic, upgrades independent of app; adds memory/latency and operational complexity. Library (Resilience4j): finer-grained per-method control, easier local debug, follows app deploy cycle. Many teams use **library in app for business-aware fallbacks** and **mesh for mTLS and L4/L7 routing**.
+</details>
 
-### Q25. Design checkout using patterns from this document — outline.
+<details class="qa-item">
+<summary>17. How do you debug missing events in Kafka after a successful API call?</summary>
 
-**A.** Mobile → **Gateway** (JWT, rate limit) → **Mobile BFF** (aggregate order status display) → **Order Service** **orchestrated saga**: reserve inventory, charge payment, confirm — each step local TX + **Outbox** to Kafka; **ACL** in Payment for legacy fraud check via **Ambassador** holding API keys; **Circuit breaker + bulkhead** on inventory and payment clients; **CQRS** `OrderSummary` projection for history screen with 3s staleness UX (poll or version); no Event Sourcing unless audit mandates — relational write DB sufficient.
+Check: (1) API returned 200 — write TX committed? (2) Outbox row exists with `published_at` null? → relay issue. (3) Published but no consumer? → consumer lag, wrong topic, ACL on broker. (4) Consumer errors? → DLQ, poison message. Trace `traceId` and `aggregate_id` across outbox and consumer logs.
 
-### Q26. How does the Strangler pattern interact with the Anti-Corruption Layer?
+</details>
 
-**A.** During migration, new services often use ACL to talk to monolith database or APIs temporarily. Strangler routes traffic to new service; ACL hides monolith's model. As data migrates, ACL shrinks — monolith read replaced by local DB, then monolith module removed. ACL is the **compatibility seam** during strangler phases.
+<details class="qa-item">
+<summary>18. What is an anti-pattern when combining Gateway, BFF, and Saga?</summary>
 
-### Q27. What metrics would you alert on for outbox and CQRS?
+Implementing checkout saga as Gateway filter chaining HTTP calls — business orchestration at edge, untestable, wrong failure semantics. Correct: Gateway authenticates and routes to Order service or Checkout BFF; **saga lives in domain service** with persisted state and outbox.
 
-**A.** Outbox: count unpublished rows, age of oldest unpublished, relay error rate, publish throughput. CQRS: consumer lag, projection processing latency p99, rebuild duration, mismatch count vs reconciliation job. Saga: count in non-terminal states > N minutes, compensation failure rate.
+</details>
 
-### Q28. Can you use Event Sourcing without CQRS?
+<details class="qa-item">
+<summary>19. Event Sourcing: how do you handle schema evolution?</summary>
 
-**A.** Yes, but uncommon at scale — you'd replay events on every read (slow) or maintain snapshots without separate query stores. In practice ES almost always pairs with **projections (CQRS read side)** or snapshots for queries. ES without CQRS suits very small aggregates or tooling that always loads by ID with snapshots.
+Never mutate stored events. Version event types; implement **upcasters** that transform old events to new shape on read/replay; snapshot aggregates to limit replay chain; test replay in CI. Consider compacted topics separately from event store — different concerns.
+
+</details>
+
+<details class="qa-item">
+<summary>20. How would you size a bulkhead for a downstream HTTP dependency?</summary>
+
+Load test peak **concurrent in-flight** calls (not RPS alone). Set `maxConcurrentCalls` ≈ measured peak × 1.3–1.5 with `maxWaitDuration` bounded. Monitor rejection rate and latency. Separate bulkheads for critical vs background workloads. Revisit after dependency SLA changes.
+
+</details>
+
+<details class="qa-item">
+<summary>21. BFF partial failure — how should the UI behave?</summary>
+
+Return 200 with **degraded payload** when optional sections fail (reviews unavailable) if product accepts; use circuit breaker fallbacks per section. Critical sections failing → 503 or partial 200 with clear `errors[]` and retry hints. Never fail entire product page because recommendations service is down unless recommendations are contractually required.
+
+</details>
+
+<details class="qa-item">
+<summary>22. When does CQRS add more harm than good?</summary>
+
+Low read/write traffic admin CRUD; tiny team without ops for projections; strong read-your-writes requirement without UX design; multiple overlapping projections without ownership. CQRS adds **lag, duplication, and operational surfaces** — need measurable read scaling or team scaling pain to justify.
+
+</details>
+
+<details class="qa-item">
+<summary>23. Explain idempotency in saga steps with an example.</summary>
+
+Each step message carries `idempotencyKey`. Payment handler: if key processed, return previous result without re-charging. Example: client retries `ChargePayment` on timeout; second delivery sees existing key in `processed_commands` table, skips charge, still emits `PaymentCompleted` for saga progression (or returns stored outcome).
+
+</details>
+
+<details class="qa-item">
+<summary>24. Service mesh sidecar vs library circuit breaker — trade-off?</summary>
+
+Sidecar/mesh: uniform policy, language-agnostic, upgrades independent of app; adds memory/latency and operational complexity. Library (Resilience4j): finer-grained per-method control, easier local debug, follows app deploy cycle. Many teams use **library in app for business-aware fallbacks** and **mesh for mTLS and L4/L7 routing**.
+
+</details>
+
+<details class="qa-item">
+<summary>25. Design checkout using patterns from this document — outline.</summary>
+
+Mobile → **Gateway** (JWT, rate limit) → **Mobile BFF** (aggregate order status display) → **Order Service** **orchestrated saga**: reserve inventory, charge payment, confirm — each step local TX + **Outbox** to Kafka; **ACL** in Payment for legacy fraud check via **Ambassador** holding API keys; **Circuit breaker + bulkhead** on inventory and payment clients; **CQRS** `OrderSummary` projection for history screen with 3s staleness UX (poll or version); no Event Sourcing unless audit mandates — relational write DB sufficient.
+
+</details>
+
+<details class="qa-item">
+<summary>26. How does the Strangler pattern interact with the Anti-Corruption Layer?</summary>
+
+During migration, new services often use ACL to talk to monolith database or APIs temporarily. Strangler routes traffic to new service; ACL hides monolith's model. As data migrates, ACL shrinks — monolith read replaced by local DB, then monolith module removed. ACL is the **compatibility seam** during strangler phases.
+
+</details>
+
+<details class="qa-item">
+<summary>27. What metrics would you alert on for outbox and CQRS?</summary>
+
+Outbox: count unpublished rows, age of oldest unpublished, relay error rate, publish throughput. CQRS: consumer lag, projection processing latency p99, rebuild duration, mismatch count vs reconciliation job. Saga: count in non-terminal states > N minutes, compensation failure rate.
+
+</details>
+
+<details class="qa-item">
+<summary>28. Can you use Event Sourcing without CQRS?</summary>
+
+Yes, but uncommon at scale — you'd replay events on every read (slow) or maintain snapshots without separate query stores. In practice ES almost always pairs with **projections (CQRS read side)** or snapshots for queries. ES without CQRS suits very small aggregates or tooling that always loads by ID with snapshots.
+
+</details>
 
 ---
 

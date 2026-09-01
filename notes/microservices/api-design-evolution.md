@@ -24,7 +24,6 @@ Spring Boot 3.x / Spring Cloud Gateway 4.x / OpenAPI 3.1. Servlet stack and reac
 16. [Multi-Tenant and Partner API Isolation](#16-multi-tenant-and-partner-api-isolation)
 17. [Production Debugging Playbook](#17-production-debugging-playbook)
 18. [Quick Decision Matrix](#18-quick-decision-matrix)
-19. [Interview Q&A](#19-interview-qa)
 
 ---
 
@@ -1281,127 +1280,217 @@ When API behavior is "random," it is usually **version/routing skew**, **compat 
 
 ---
 
-## 19. Interview Q&A
+## Practice Questions & Answers
 
-### Q1. What is the difference between URI versioning and header versioning?
+<details class="qa-item">
+<summary>1. What is the difference between URI versioning and header versioning?</summary>
 
-**A.** **URI versioning** embeds the version in the path (`/api/v1/orders`). It is visible in logs, easy to route at the gateway, and simple for clients. **Header versioning** keeps URLs stable and uses `Accept-Version`, `X-Api-Version`, or custom media types. Headers are cleaner for URL aesthetics but harder to debug without explicit logging, complicate CDN cache keys, and are easier for clients to omit. Most Spring production systems use **URI versioning at the public edge** for operational clarity.
+**URI versioning** embeds the version in the path (`/api/v1/orders`). It is visible in logs, easy to route at the gateway, and simple for clients. **Header versioning** keeps URLs stable and uses `Accept-Version`, `X-Api-Version`, or custom media types. Headers are cleaner for URL aesthetics but harder to debug without explicit logging, complicate CDN cache keys, and are easier for clients to omit. Most Spring production systems use **URI versioning at the public edge** for operational clarity.
 
-### Q2. What changes are backward compatible without bumping API version?
+</details>
 
-**A.** Adding **optional** request fields, adding **new** response fields clients can ignore, adding **new endpoints**, and adding **optional** query parameters with defaults. Do **not** remove or rename fields, change types, tighten validation on existing optional inputs, change enum semantics, or alter the meaning of existing fields without a version bump.
+<details class="qa-item">
+<summary>2. What changes are backward compatible without bumping API version?</summary>
 
-### Q3. How do you handle breaking changes in a microservices architecture?
+Adding **optional** request fields, adding **new** response fields clients can ignore, adding **new endpoints**, and adding **optional** query parameters with defaults. Do **not** remove or rename fields, change types, tighten validation on existing optional inputs, change enum semantics, or alter the meaning of existing fields without a version bump.
 
-**A.** Introduce a **new major version** (`/api/v2`), run **v1 and v2 in parallel** during migration, publish **OpenAPI diff and sunset date**, send **Deprecation/Sunset/Link headers**, use **adapter controllers** if needed, monitor **per-version traffic**, and run **contract tests**. Remove v1 only when metrics and consumer registry show zero critical callers.
+</details>
 
-### Q4. What belongs in an API gateway vs in a microservice?
+<details class="qa-item">
+<summary>3. How do you handle breaking changes in a microservices architecture?</summary>
 
-**A.** Gateway: **TLS termination**, **authentication validation**, **coarse rate limiting**, **routing**, **CORS**, **request ID**, **timeouts**, **circuit breaking** on routes. Service: **domain authorization**, **business validation**, **fine-grained quotas**, **data access**, **transaction boundaries**. BFF: **aggregation** tailored to a client. Avoid business orchestration logic in gateway filter scripts.
+Introduce a **new major version** (`/api/v2`), run **v1 and v2 in parallel** during migration, publish **OpenAPI diff and sunset date**, send **Deprecation/Sunset/Link headers**, use **adapter controllers** if needed, monitor **per-version traffic**, and run **contract tests**. Remove v1 only when metrics and consumer registry show zero critical callers.
 
-### Q5. Explain token bucket rate limiting.
+</details>
 
-**A.** A bucket holds tokens refilled at a steady **replenish rate** (tokens per second) up to **burst capacity**. Each request consumes one token; if empty, reject with **429**. It allows short bursts while enforcing average rate over time. Spring Cloud Gateway `RequestRateLimiter` with Redis implements this pattern.
+<details class="qa-item">
+<summary>4. What belongs in an API gateway vs in a microservice?</summary>
 
-### Q6. Why return 429 instead of 503 when rate limited?
+Gateway: **TLS termination**, **authentication validation**, **coarse rate limiting**, **routing**, **CORS**, **request ID**, **timeouts**, **circuit breaking** on routes. Service: **domain authorization**, **business validation**, **fine-grained quotas**, **data access**, **transaction boundaries**. BFF: **aggregation** tailored to a client. Avoid business orchestration logic in gateway filter scripts.
 
-**A.** **429** signals the client exceeded a **quota or rate policy** — backoff and retry later (`Retry-After`). **503** implies the **server is temporarily unable** to handle requests due to overload or maintenance — clients may retry aggressively and amplify load. Correct status codes improve client behavior and observability dashboards.
+</details>
 
-### Q7. What is OpenAPI and how does it relate to Swagger?
+<details class="qa-item">
+<summary>5. Explain token bucket rate limiting.</summary>
 
-**A.** **OpenAPI** is the specification format (currently 3.1) describing REST API paths, operations, schemas, and security. **Swagger** was the original name; today it often refers to **tooling** (Swagger UI, legacy Codegen). In Spring Boot 3, **springdoc-openapi** generates OpenAPI 3 docs from code and serves Swagger UI optionally.
+A bucket holds tokens refilled at a steady **replenish rate** (tokens per second) up to **burst capacity**. Each request consumes one token; if empty, reject with **429**. It allows short bursts while enforcing average rate over time. Spring Cloud Gateway `RequestRateLimiter` with Redis implements this pattern.
 
-### Q8. How do you keep OpenAPI documentation in sync with code in production?
+</details>
 
-**A.** Treat spec as a **build artifact**: generate in CI from `/v3/api-docs` under prod-like profile, **diff against published spec** with oasdiff, block breaking changes without major version, publish to **docs portal** on release. Alternatively **design-first** — OpenAPI is source of truth and tests validate controllers. Never rely on manually edited Wiki docs.
+<details class="qa-item">
+<summary>6. Why return 429 instead of 503 when rate limited?</summary>
 
-### Q9. What are Deprecation and Sunset headers?
+**429** signals the client exceeded a **quota or rate policy** — backoff and retry later (`Retry-After`). **503** implies the **server is temporarily unable** to handle requests due to overload or maintenance — clients may retry aggressively and amplify load. Correct status codes improve client behavior and observability dashboards.
 
-**A.** **`Deprecation: true`** (RFC 9745 ecosystem) marks a response as using a deprecated API version or feature. **`Sunset`** (RFC 8594) gives an HTTP-date when the API will be removed. **`Link: rel="successor-version"`** points to the replacement. They let clients and monitors detect end-of-life automatically.
+</details>
 
-### Q10. What is a BFF and how is it different from an API gateway?
+<details class="qa-item">
+<summary>7. What is OpenAPI and how does it relate to Swagger?</summary>
 
-**A.** **API Gateway** is infrastructure ingress — cross-cutting policies and routing. **BFF (Backend for Frontend)** is an **application service** that aggregates and shapes data for one client type (mobile vs web). Gateway routes to BFF; BFF calls domain microservices. BFF contains presentation logic; gateway should stay thin.
+**OpenAPI** is the specification format (currently 3.1) describing REST API paths, operations, schemas, and security. **Swagger** was the original name; today it often refers to **tooling** (Swagger UI, legacy Codegen). In Spring Boot 3, **springdoc-openapi** generates OpenAPI 3 docs from code and serves Swagger UI optionally.
 
-### Q11. How do you version internal service-to-service APIs?
+</details>
 
-**A.** Common approaches: **URI versioning** (`/internal/v1`) for clarity, **separate deployment** of breaking services with consumer updates, or **strict additive-only** policy with consumer-driven contracts (Pact). Even internal APIs deserve timeouts, auth (mTLS/OAuth client credentials), and OpenAPI — "internal" is not "trusted forever."
+<details class="qa-item">
+<summary>8. How do you keep OpenAPI documentation in sync with code in production?</summary>
 
-### Q12. What is consumer-driven contract testing?
+Treat spec as a **build artifact**: generate in CI from `/v3/api-docs` under prod-like profile, **diff against published spec** with oasdiff, block breaking changes without major version, publish to **docs portal** on release. Alternatively **design-first** — OpenAPI is source of truth and tests validate controllers. Never rely on manually edited Wiki docs.
 
-**A.** **Consumers** define expected request/response shapes (Pact) or **producers** publish contracts (Spring Cloud Contract). CI verifies the provider against all consumer contracts. Catches field renames and status code changes that unit tests with mocks miss. Complements OpenAPI structural diff.
+</details>
 
-### Q13. How does Spring Cloud Gateway implement rate limiting?
+<details class="qa-item">
+<summary>9. What are Deprecation and Sunset headers?</summary>
 
-**A.** The **`RequestRateLimiter`** filter uses a **`KeyResolver`** (user, IP, tenant) and **`RedisRateLimiter`** (token bucket backed by Redis Lua scripts). Configure `replenishRate` and `burstCapacity` per route. Requires reactive Redis; cluster Redis for HA. Custom filters can integrate Bucket4j or Envoy rate limit service.
+**`Deprecation: true`** (RFC 9745 ecosystem) marks a response as using a deprecated API version or feature. **`Sunset`** (RFC 8594) gives an HTTP-date when the API will be removed. **`Link: rel="successor-version"`** points to the replacement. They let clients and monitors detect end-of-life automatically.
 
-### Q14. What is the difference between rate limiting and quotas?
+</details>
 
-**A.** **Rate limiting** controls **instantaneous request rate** (per second/minute) for burst protection. **Quotas** cap **total usage over a longer period** (daily/monthly API call allowance per plan). Rate limits prevent spikes; quotas enforce commercial tiers. Implement quotas with durable counters (DB/Redis) and reset at period boundaries.
+<details class="qa-item">
+<summary>10. What is a BFF and how is it different from an API gateway?</summary>
 
-### Q15. How do you make POST idempotent for API clients?
+**API Gateway** is infrastructure ingress — cross-cutting policies and routing. **BFF (Backend for Frontend)** is an **application service** that aggregates and shapes data for one client type (mobile vs web). Gateway routes to BFF; BFF calls domain microservices. BFF contains presentation logic; gateway should stay thin.
 
-**A.** Require **`Idempotency-Key`** header (UUID from client). Server stores key → response mapping with TTL (e.g., 24 hours). Duplicate POST with same key returns **same status and body** without re-executing side effects. Essential for mobile flaky networks and gateway-safe retries. Document in OpenAPI.
+</details>
 
-### Q16. What is RFC 7807 Problem Details?
+<details class="qa-item">
+<summary>11. How do you version internal service-to-service APIs?</summary>
 
-**A.** Standard JSON error format: `type` (URI identifying problem), `title`, `status`, `detail`, optional extensions. Spring Boot 3 **`ProblemDetail`** class produces `application/problem+json`. Consistent errors across gateway and services help partners programmatically handle failures without parsing HTML or ad-hoc JSON shapes.
+Common approaches: **URI versioning** (`/internal/v1`) for clarity, **separate deployment** of breaking services with consumer updates, or **strict additive-only** policy with consumer-driven contracts (Pact). Even internal APIs deserve timeouts, auth (mTLS/OAuth client credentials), and OpenAPI — "internal" is not "trusted forever."
 
-### Q17. When is content negotiation (Accept header) versioning appropriate?
+</details>
 
-**A.** When you need **stable URLs** and clients already support custom media types (`application/vnd.company.v2+json`). Rare in mobile/public APIs due to poor tooling support. Requires careful **Vary: Accept** caching. Prefer URI versioning unless API maturity and client ecosystem support vendor media types.
+<details class="qa-item">
+<summary>12. What is consumer-driven contract testing?</summary>
 
-### Q18. How do you detect breaking OpenAPI changes in CI?
+**Consumers** define expected request/response shapes (Pact) or **producers** publish contracts (Spring Cloud Contract). CI verifies the provider against all consumer contracts. Catches field renames and status code changes that unit tests with mocks miss. Complements OpenAPI structural diff.
 
-**A.** Tools like **oasdiff**, **openapi-diff**, or **Spectral** rules compare PR spec to main. Fail on removed properties, type changes, removed endpoints, or required field additions. Pair with **semver** on `info.version` and API path major version. Publish human-readable changelog from diff output.
+</details>
 
-### Q19. What production issues arise from StripPrefix in Spring Cloud Gateway?
+<details class="qa-item">
+<summary>13. How does Spring Cloud Gateway implement rate limiting?</summary>
 
-**A.** Gateway removes path segments before forwarding; if service controllers expect full `/api/v1/...` but gateway strips `/api/v1`, service returns **404**. Symptoms appear only through gateway — direct service calls in K8s succeed. Fix by aligning **RewritePath/StripPrefix** with controller `@RequestMapping` and documenting canonical external path in OpenAPI.
+The **`RequestRateLimiter`** filter uses a **`KeyResolver`** (user, IP, tenant) and **`RedisRateLimiter`** (token bucket backed by Redis Lua scripts). Configure `replenishRate` and `burstCapacity` per route. Requires reactive Redis; cluster Redis for HA. Custom filters can integrate Bucket4j or Envoy rate limit service.
 
-### Q20. How do you safely sunset an API version?
+</details>
 
-**A.** Announce **sunset date** (90+ days for partners), add **Deprecation/Sunset headers**, monitor **traffic metrics per version**, maintain **consumer registry**, provide **migration guide and OpenAPI diff**, offer **adapter layer** if needed, run **canary** on v2, alert on any v1 usage near cutoff, and only decommission when **business sign-off** and metrics confirm zero critical traffic.
+<details class="qa-item">
+<summary>14. What is the difference between rate limiting and quotas?</summary>
 
-### Q21. What is the difference between additive and behavioral compatibility?
+**Rate limiting** controls **instantaneous request rate** (per second/minute) for burst protection. **Quotas** cap **total usage over a longer period** (daily/monthly API call allowance per plan). Rate limits prevent spikes; quotas enforce commercial tiers. Implement quotas with durable counters (DB/Redis) and reset at period boundaries.
 
-**A.** **Additive compatibility** means schema changes (new optional fields) old clients tolerate. **Behavioral compatibility** means operations **semantically** behave the same — e.g., returning fewer items due to new default pagination is schema-compatible but **behavior-breaking**. Requires version bump or explicit opt-in parameters preserving old defaults.
+</details>
 
-### Q22. Should Swagger UI be enabled in production?
+<details class="qa-item">
+<summary>15. How do you make POST idempotent for API clients?</summary>
 
-**A.** Generally **no** for public internet — exposes attack surface and may reveal **internal/admin endpoints**. Prefer **disabled springdoc UI in prod** and publish **read-only Redoc** to authenticated docs portal. If enabled, protect with **SSO/VPN/IP allowlist** and keep dependencies patched.
+Require **`Idempotency-Key`** header (UUID from client). Server stores key → response mapping with TTL (e.g., 24 hours). Duplicate POST with same key returns **same status and body** without re-executing side effects. Essential for mobile flaky networks and gateway-safe retries. Document in OpenAPI.
 
-### Q23. How do gateway timeouts relate to service timeouts?
+</details>
 
-**A.** Timeouts must **align top-down**: client < CDN < gateway < BFF < downstream services. If service timeout exceeds gateway, gateway returns **504** while service still processing — orphaned work and duplicate client retries. Set gateway `response-timeout` slightly **shorter** than caller deadline; services shorter than gateway.
+<details class="qa-item">
+<summary>16. What is RFC 7807 Problem Details?</summary>
 
-### Q24. What is API composition and where should it live?
+Standard JSON error format: `type` (URI identifying problem), `title`, `status`, `detail`, optional extensions. Spring Boot 3 **`ProblemDetail`** class produces `application/problem+json`. Consistent errors across gateway and services help partners programmatically handle failures without parsing HTML or ad-hoc JSON shapes.
 
-**A.** **API composition** aggregates data from multiple services into one response (mobile home screen). Belongs in a **BFF** or dedicated aggregator service with parallel calls (WebClient), timeouts, and partial failure handling — **not** in gateway filters or a single "god" domain service without boundaries.
+</details>
 
-### Q25. How do you rate limit fairly behind NAT?
+<details class="qa-item">
+<summary>17. When is content negotiation (Accept header) versioning appropriate?</summary>
 
-**A.** Do not rely on **IP alone** — use **API key**, **OAuth client_id**, or **JWT sub** as rate limit key after authentication. For anonymous endpoints, combine IP with **User-Agent fingerprint** cautiously, or require API key even for free tier. Document limits per tier; return **`X-RateLimit-*`** headers.
+When you need **stable URLs** and clients already support custom media types (`application/vnd.company.v2+json`). Rare in mobile/public APIs due to poor tooling support. Requires careful **Vary: Accept** caching. Prefer URI versioning unless API maturity and client ecosystem support vendor media types.
 
-### Q26. What is the outbox pattern's relation to public APIs?
+</details>
 
-**A.** Public API returns **202 Accepted** for async operations while **outbox** ensures event publication matches DB commit. Document **polling endpoint** or **webhook** for completion. API evolution must keep **async status schema** backward compatible — mobile apps poll for days on slow networks.
+<details class="qa-item">
+<summary>18. How do you detect breaking OpenAPI changes in CI?</summary>
 
-### Q27. How do you document authentication in OpenAPI 3?
+Tools like **oasdiff**, **openapi-diff**, or **Spectral** rules compare PR spec to main. Fail on removed properties, type changes, removed endpoints, or required field additions. Pair with **semver** on `info.version` and API path major version. Publish human-readable changelog from diff output.
 
-**A.** Define **`components.securitySchemes`**: `http/bearer` for JWT, `oauth2` with flows (clientCredentials for M2M, authorizationCode for user apps), or `apiKey` for partner keys. Apply **`security`** globally and override per operation. Include **scopes** matching authorization server. Provide **worked examples** in description, not live secrets.
+</details>
 
-### Q28. What is shadow traffic for API migrations?
+<details class="qa-item">
+<summary>19. What production issues arise from StripPrefix in Spring Cloud Gateway?</summary>
 
-**A.** Duplicate a sample of **v1 production traffic** to **v2 handlers** in read-only mode, compare responses (diff tool, metrics on mismatch rate) before cutover. Catches behavioral differences OpenAPI diff misses. Do not shadow-write without idempotency controls.
+Gateway removes path segments before forwarding; if service controllers expect full `/api/v1/...` but gateway strips `/api/v1`, service returns **404**. Symptoms appear only through gateway — direct service calls in K8s succeed. Fix by aligning **RewritePath/StripPrefix** with controller `@RequestMapping` and documenting canonical external path in OpenAPI.
 
-### Q29. Explain canary routing for a new API version at the gateway.
+</details>
 
-**A.** Route **95%** traffic to v1 backend, **5%** to v2 via weighted `metadata` or service mesh VirtualService; compare error rate and latency. Spring Cloud Gateway can use custom **`WeightCalculatorWebFilter`** or two routes with random predicate. Promote weight when SLOs hold.
+<details class="qa-item">
+<summary>20. How do you safely sunset an API version?</summary>
 
-### Q30. What is the biggest mistake teams make with backward compatibility?
+Announce **sunset date** (90+ days for partners), add **Deprecation/Sunset headers**, monitor **traffic metrics per version**, maintain **consumer registry**, provide **migration guide and OpenAPI diff**, offer **adapter layer** if needed, run **canary** on v2, alert on any v1 usage near cutoff, and only decommission when **business sign-off** and metrics confirm zero critical traffic.
 
-**A.** Assuming **"we only added a field"** while simultaneously **tightening validation**, **changing defaults**, or **sharing one DTO** across versions — then shipping on the same `/v1` path. Compatibility is about **client observable behavior**, not developer perception of change size. Version paths, separate DTOs, contract tests, and oasdiff in CI prevent this class of incident.
+</details>
+
+<details class="qa-item">
+<summary>21. What is the difference between additive and behavioral compatibility?</summary>
+
+**Additive compatibility** means schema changes (new optional fields) old clients tolerate. **Behavioral compatibility** means operations **semantically** behave the same — e.g., returning fewer items due to new default pagination is schema-compatible but **behavior-breaking**. Requires version bump or explicit opt-in parameters preserving old defaults.
+
+</details>
+
+<details class="qa-item">
+<summary>22. Should Swagger UI be enabled in production?</summary>
+
+Generally **no** for public internet — exposes attack surface and may reveal **internal/admin endpoints**. Prefer **disabled springdoc UI in prod** and publish **read-only Redoc** to authenticated docs portal. If enabled, protect with **SSO/VPN/IP allowlist** and keep dependencies patched.
+
+</details>
+
+<details class="qa-item">
+<summary>23. How do gateway timeouts relate to service timeouts?</summary>
+
+Timeouts must **align top-down**: client < CDN < gateway < BFF < downstream services. If service timeout exceeds gateway, gateway returns **504** while service still processing — orphaned work and duplicate client retries. Set gateway `response-timeout` slightly **shorter** than caller deadline; services shorter than gateway.
+
+</details>
+
+<details class="qa-item">
+<summary>24. What is API composition and where should it live?</summary>
+
+**API composition** aggregates data from multiple services into one response (mobile home screen). Belongs in a **BFF** or dedicated aggregator service with parallel calls (WebClient), timeouts, and partial failure handling — **not** in gateway filters or a single "god" domain service without boundaries.
+
+</details>
+
+<details class="qa-item">
+<summary>25. How do you rate limit fairly behind NAT?</summary>
+
+Do not rely on **IP alone** — use **API key**, **OAuth client_id**, or **JWT sub** as rate limit key after authentication. For anonymous endpoints, combine IP with **User-Agent fingerprint** cautiously, or require API key even for free tier. Document limits per tier; return **`X-RateLimit-*`** headers.
+
+</details>
+
+<details class="qa-item">
+<summary>26. What is the outbox pattern's relation to public APIs?</summary>
+
+Public API returns **202 Accepted** for async operations while **outbox** ensures event publication matches DB commit. Document **polling endpoint** or **webhook** for completion. API evolution must keep **async status schema** backward compatible — mobile apps poll for days on slow networks.
+
+</details>
+
+<details class="qa-item">
+<summary>27. How do you document authentication in OpenAPI 3?</summary>
+
+Define **`components.securitySchemes`**: `http/bearer` for JWT, `oauth2` with flows (clientCredentials for M2M, authorizationCode for user apps), or `apiKey` for partner keys. Apply **`security`** globally and override per operation. Include **scopes** matching authorization server. Provide **worked examples** in description, not live secrets.
+
+</details>
+
+<details class="qa-item">
+<summary>28. What is shadow traffic for API migrations?</summary>
+
+Duplicate a sample of **v1 production traffic** to **v2 handlers** in read-only mode, compare responses (diff tool, metrics on mismatch rate) before cutover. Catches behavioral differences OpenAPI diff misses. Do not shadow-write without idempotency controls.
+
+</details>
+
+<details class="qa-item">
+<summary>29. Explain canary routing for a new API version at the gateway.</summary>
+
+Route **95%** traffic to v1 backend, **5%** to v2 via weighted `metadata` or service mesh VirtualService; compare error rate and latency. Spring Cloud Gateway can use custom **`WeightCalculatorWebFilter`** or two routes with random predicate. Promote weight when SLOs hold.
+
+</details>
+
+<details class="qa-item">
+<summary>30. What is the biggest mistake teams make with backward compatibility?</summary>
+
+Assuming **"we only added a field"** while simultaneously **tightening validation**, **changing defaults**, or **sharing one DTO** across versions — then shipping on the same `/v1` path. Compatibility is about **client observable behavior**, not developer perception of change size. Version paths, separate DTOs, contract tests, and oasdiff in CI prevent this class of incident.
+
+</details>
 
 ---
 

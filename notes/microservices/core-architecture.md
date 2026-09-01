@@ -22,7 +22,6 @@ Spring Boot 3.x / Java 17+. This is not a "what is a microservice" tutorial. It 
 14. [Service Ownership](#14-service-ownership)
 15. [Production Debugging Playbook](#15-production-debugging-playbook)
 16. [Quick Decision Matrix](#16-quick-decision-matrix)
-17. [Scenario-Based Questions](#17-scenario-based-questions)
 
 ---
 
@@ -1454,9 +1453,10 @@ Next update: 15 min
 
 ---
 
-## 17. Scenario-Based Questions
+## Practice Questions & Answers
 
-### Q1. Orders succeed in UI but warehouse never receives them. Where do you look first?
+<details class="qa-item">
+<summary>1. Orders succeed in UI but warehouse never receives them. Where do you look first?</summary>
 
 **Root cause pattern:** Lost or lagging **integration events** — often outbox relay stopped, consumer lag, or publishing before transaction commit.
 
@@ -1464,7 +1464,10 @@ Next update: 15 min
 
 ---
 
-### Q2. After splitting the monolith, P99 latency went from 200ms to 2s on checkout. Why?
+</details>
+
+<details class="qa-item">
+<summary>2. After splitting the monolith, P99 latency went from 200ms to 2s on checkout. Why?</summary>
 
 **Root cause pattern:** **Serial synchronous microservice calls** replaced in-process method invocations. Six network hops × 50ms each + JSON serialization + connection pool wait.
 
@@ -1472,7 +1475,10 @@ Next update: 15 min
 
 ---
 
-### Q3. Two services deploy fine alone but break when deployed together. What architecture smell is this?
+</details>
+
+<details class="qa-item">
+<summary>3. Two services deploy fine alone but break when deployed together. What architecture smell is this?</summary>
 
 **Root cause:** **Distributed monolith** — shared library version coupling, shared database migration order, or breaking API without backward compatibility.
 
@@ -1480,7 +1486,10 @@ Next update: 15 min
 
 ---
 
-### Q4. Inventory shows 5 units but checkout says out of stock intermittently.
+</details>
+
+<details class="qa-item">
+<summary>4. Inventory shows 5 units but checkout says out of stock intermittently.</summary>
 
 **Root cause:** **Eventual consistency** between catalog/inventory projection and real-time stock; or race without reservation lock.
 
@@ -1488,7 +1497,10 @@ Next update: 15 min
 
 ---
 
-### Q5. Schema migration on Monday broke three "unrelated" services. How?
+</details>
+
+<details class="qa-item">
+<summary>5. Schema migration on Monday broke three "unrelated" services. How?</summary>
 
 **Root cause:** **Shared database anti-pattern** — three services read same table or view; migration renamed column.
 
@@ -1496,7 +1508,10 @@ Next update: 15 min
 
 ---
 
-### Q6. Kafka consumer reprocesses old events after deploy and creates duplicate shipments.
+</details>
+
+<details class="qa-item">
+<summary>6. Kafka consumer reprocesses old events after deploy and creates duplicate shipments.</summary>
 
 **Root cause:** Missing **idempotency** store; or consumer offset reset (`auto.offset.reset=earliest`) misconfiguration.
 
@@ -1504,7 +1519,10 @@ Next update: 15 min
 
 ---
 
-### Q7. Team insists "Customer" must be one REST resource company-wide. What's wrong?
+</details>
+
+<details class="qa-item">
+<summary>7. Team insists "Customer" must be one REST resource company-wide. What's wrong?</summary>
 
 **Root cause:** **Bounded context** violation — one model cannot satisfy sales, support, billing, and compliance simultaneously.
 
@@ -1512,7 +1530,10 @@ Next update: 15 min
 
 ---
 
-### Q8. API gateway logs show 401 only for mobile clients after scale-out.
+</details>
+
+<details class="qa-item">
+<summary>8. API gateway logs show 401 only for mobile clients after scale-out.</summary>
 
 **Root cause:** **Stateful session** on pods without Redis; mobile hits new pod without session.
 
@@ -1520,7 +1541,10 @@ Next update: 15 min
 
 ---
 
-### Q9. New engineer shipped a `@FeignClient` from Order to Inventory's internal admin endpoint. Incident follows. Prevention?
+</details>
+
+<details class="qa-item">
+<summary>9. New engineer shipped a `@FeignClient` from Order to Inventory's internal admin endpoint. Incident follows. Prevention?</summary>
 
 **Root cause:** **Encapsulation breach** — internal API treated as public contract.
 
@@ -1528,7 +1552,10 @@ Next update: 15 min
 
 ---
 
-### Q10. Flash sale: inventory oversold by 12%. Event-driven architecture "failed."
+</details>
+
+<details class="qa-item">
+<summary>10. Flash sale: inventory oversold by 12%. Event-driven architecture "failed."</summary>
 
 **Root cause:** Consumed `OrderPlaced` before payment confirmed; or lost ordering across partitions; or no reservation invariant.
 
@@ -1536,7 +1563,10 @@ Next update: 15 min
 
 ---
 
-### Q11. Platform team runs all services but feature teams write code. Incidents take 4 hours to escalate. Why?
+</details>
+
+<details class="qa-item">
+<summary>11. Platform team runs all services but feature teams write code. Incidents take 4 hours to escalate. Why?</summary>
 
 **Root cause:** **Conway's Law / ownership mismatch** — ops doesn't know domain; devs not on-call.
 
@@ -1544,7 +1574,10 @@ Next update: 15 min
 
 ---
 
-### Q12. `common-domain` jar change required 8-service coordinated release. Alternative?
+</details>
+
+<details class="qa-item">
+<summary>12. `common-domain` jar change required 8-service coordinated release. Alternative?</summary>
 
 **Root cause:** Shared kernel absorbed **behavior and entities**, not just primitives.
 
@@ -1552,7 +1585,10 @@ Next update: 15 min
 
 ---
 
-### Q13. Strangler migration: both monolith and order-service write orders. Duplicate IDs appear.
+</details>
+
+<details class="qa-item">
+<summary>13. Strangler migration: both monolith and order-service write orders. Duplicate IDs appear.</summary>
 
 **Root cause:** **Dual write** during migration without single writer authority.
 
@@ -1560,7 +1596,10 @@ Next update: 15 min
 
 ---
 
-### Q14. Service passes health check but users get 503 from gateway.
+</details>
+
+<details class="qa-item">
+<summary>14. Service passes health check but users get 503 from gateway.</summary>
 
 **Root cause:** **Liveness vs readiness** confusion — app up but not ready (Kafka consumer stuck, dependency down). Gateway routes to not-ready pods.
 
@@ -1568,7 +1607,10 @@ Next update: 15 min
 
 ---
 
-### Q15. Elasticsearch product index diverges from PostgreSQL catalog. Search shows discontinued items.
+</details>
+
+<details class="qa-item">
+<summary>15. Elasticsearch product index diverges from PostgreSQL catalog. Search shows discontinued items.</summary>
 
 **Root cause:** **Dual source of truth** without reliable event pipeline or full reindex discipline.
 
@@ -1576,7 +1618,10 @@ Next update: 15 min
 
 ---
 
-### Q16. Twelve-Factor violation: ops SSHs to pod to run Flyway manually. Risk?
+</details>
+
+<details class="qa-item">
+<summary>16. Twelve-Factor violation: ops SSHs to pod to run Flyway manually. Risk?</summary>
 
 **Root cause:** **Admin processes not tied to release** — schema drift between pods/regions; non-reproducible state.
 
@@ -1584,7 +1629,10 @@ Next update: 15 min
 
 ---
 
-### Q17. Order service holds DB connection 30s while waiting for payment HTTP. Pool exhausted under load.
+</details>
+
+<details class="qa-item">
+<summary>17. Order service holds DB connection 30s while waiting for payment HTTP. Pool exhausted under load.</summary>
 
 **Root cause:** **Long transaction spanning external I/O** — classic `@Transactional` on orchestration method.
 
@@ -1592,7 +1640,10 @@ Next update: 15 min
 
 ---
 
-### Q18. Microservices adopted because "Netflix does it" but team is 6 developers. Outcome?
+</details>
+
+<details class="qa-item">
+<summary>18. Microservices adopted because "Netflix does it" but team is 6 developers. Outcome?</summary>
 
 **Root cause:** **Premature decomposition** — ops toil (K8s, Kafka, tracing) exceeds delivery benefit; Conway not satisfied (one team).
 
@@ -1600,7 +1651,10 @@ Next update: 15 min
 
 ---
 
-### Q19. Domain event `OrderLineItemAdded` published to Kafka with full JPA entity graph. Consumers break on field rename.
+</details>
+
+<details class="qa-item">
+<summary>19. Domain event `OrderLineItemAdded` published to Kafka with full JPA entity graph. Consumers break on field rename.</summary>
 
 **Root cause:** **Leaking domain model** as integration contract.
 
@@ -1608,11 +1662,16 @@ Next update: 15 min
 
 ---
 
-### Q20. Quarterly "release train" of 14 services. Still microservices?
+</details>
+
+<details class="qa-item">
+<summary>20. Quarterly "release train" of 14 services. Still microservices?</summary>
 
 **Root cause:** **Distributed monolith** operational model — independent deployability not achieved.
 
 **Fix:** Prioritize breaking worst coupling (shared DB, sync cycle); contract tests; continuous deploy per service with feature flags.
+
+</details>
 
 ---
 

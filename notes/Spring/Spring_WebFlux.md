@@ -1734,107 +1734,182 @@ Turn DEBUG/TRACE off after incident — reactive logs are voluminous.
 
 ---
 
-## Scenario-Based Questions
+## Practice Questions & Answers
 
-### 1. Your team migrated a Spring MVC app to WebFlux but kept Spring Data JPA. Load tests show worse p99 latency. What happened?
+<details class="qa-item">
+<summary>1. Your team migrated a Spring MVC app to WebFlux but kept Spring Data JPA. Load tests show worse p99 latency. What happened?</summary>
 
-**Answer.** JPA is blocking. Wrapping repositories in `Mono.fromCallable` without isolating threads blocks Netty event-loop threads, or forces everything through `boundedElastic` — a thread-pool server with extra overhead. WebFlux only wins when the I/O chain is non-blocking end-to-end (R2DBC, reactive Mongo) or when workloads are I/O-multiplexed streaming. The fix is either migrate data access to R2DBC, use MVC + virtual threads, or accept elastic pooling with strict bulkheads while planning migration.
+JPA is blocking. Wrapping repositories in `Mono.fromCallable` without isolating threads blocks Netty event-loop threads, or forces everything through `boundedElastic` — a thread-pool server with extra overhead. WebFlux only wins when the I/O chain is non-blocking end-to-end (R2DBC, reactive Mongo) or when workloads are I/O-multiplexed streaming. The fix is either migrate data access to R2DBC, use MVC + virtual threads, or accept elastic pooling with strict bulkheads while planning migration.
 
-### 2. A `WebClient` call works in unit tests but production throws `DataBufferLimitException`. Why?
+</details>
 
-**Answer.** Default in-memory codec limit is 256KB. Large JSON responses exceed `maxInMemorySize`. Tests used small payloads. Fix: raise `ExchangeStrategies` codec limit for that client, or stream with `bodyToFlux` for huge payloads, or paginate downstream.
+<details class="qa-item">
+<summary>2. A `WebClient` call works in unit tests but production throws `DataBufferLimitException`. Why?</summary>
 
-### 3. `ReactiveSecurityContextHolder.getContext()` is empty inside a `@Service` method called from a controller. The controller path is secured. What went wrong?
+Default in-memory codec limit is 256KB. Large JSON responses exceed `maxInMemorySize`. Tests used small payloads. Fix: raise `ExchangeStrategies` codec limit for that client, or stream with `bodyToFlux` for huge payloads, or paginate downstream.
 
-**Answer.** Likely `publishOn`/`subscribeOn` hop without context propagation, or the service is invoked from a thread not downstream of security filters (e.g. manual `subscribe()` in a scheduler). Use `contextWrite(ReactiveSecurityContextHolder.withAuthentication(...))` where needed, enable Micrometer context propagation, avoid reading `SecurityContextHolder` ThreadLocal in WebFlux.
+</details>
 
-### 4. Two subscribers to the same `Mono` built from a `WebClient` GET cause duplicate downstream HTTP calls. Is that expected?
+<details class="qa-item">
+<summary>3. `ReactiveSecurityContextHolder.getContext()` is empty inside a `@Service` method called from a controller. The controller path is secured. What went wrong?</summary>
 
-**Answer.** Yes — cold publishers re-run per subscriber unless cached or shared. Use `.cache()`, `.transformDeferred`, or restructure to a single subscription with `flatMap`. This is a frequent production surprise when combining `doOnNext` logging with returning the same `Mono`.
+Likely `publishOn`/`subscribeOn` hop without context propagation, or the service is invoked from a thread not downstream of security filters (e.g. manual `subscribe()` in a scheduler). Use `contextWrite(ReactiveSecurityContextHolder.withAuthentication(...))` where needed, enable Micrometer context propagation, avoid reading `SecurityContextHolder` ThreadLocal in WebFlux.
 
-### 5. Gateway returns 504 for SSE but direct pod access works. List three causes.
+</details>
 
-**Answer.** (1) Gateway/http proxy response timeout shorter than stream lifetime. (2) Proxy buffering batches events until buffer fills. (3) Missing heartbeat — idle connection closed by load balancer. Fix route-specific timeouts, disable buffering (`X-Accel-Buffering: no`), send periodic SSE comments or ping.
+<details class="qa-item">
+<summary>4. Two subscribers to the same `Mono` built from a `WebClient` GET cause duplicate downstream HTTP calls. Is that expected?</summary>
 
-### 6. `flatMap(id -> repo.findById(id))` over 50,000 IDs killed the database. How do you fix without abandoning reactive?
+Yes — cold publishers re-run per subscriber unless cached or shared. Use `.cache()`, `.transformDeferred`, or restructure to a single subscription with `flatMap`. This is a frequent production surprise when combining `doOnNext` logging with returning the same `Mono`.
 
-**Answer.** Cap concurrency: `flatMap(id -> repo.findById(id), 8)` aligned with R2DBC pool `max-size`. Better: batch query `WHERE id IN (...)` in chunks, or server-side cursor. Never unbounded `flatMap` on per-row network calls.
+</details>
 
-### 7. When is `Schedulers.boundedElastic()` appropriate in WebFlux?
+<details class="qa-item">
+<summary>5. Gateway returns 504 for SSE but direct pod access works. List three causes.</summary>
 
-**Answer.** Short, bounded blocking that cannot yet be removed — legacy JDBC snippet, file read, blocking API — with explicit timeout and monitoring. Not as the default for every repository call. If most handlers need it, the architecture is wrong for WebFlux.
+(1) Gateway/http proxy response timeout shorter than stream lifetime. (2) Proxy buffering batches events until buffer fills. (3) Missing heartbeat — idle connection closed by load balancer. Fix route-specific timeouts, disable buffering (`X-Accel-Buffering: no`), send periodic SSE comments or ping.
 
-### 8. Explain cold vs hot `Flux` in the context of a live dashboard feeding 1,000 browser tabs.
+</details>
 
-**Answer.** Cold: each tab's subscription triggers a new upstream source (disastrous — 1,000 DB queries). Hot: single shared source multicasted via `publish().refCount()` or `Sinks.Many` fed by one DB poll pushes to all subscribers. Choose hot with backpressure strategy (buffer/drop/latest) based on SLA.
+<details class="qa-item">
+<summary>6. `flatMap(id -> repo.findById(id))` over 50,000 IDs killed the database. How do you fix without abandoning reactive?</summary>
 
-### 9. A junior adds `.block()` in a `WebFilter` to read the JWT claim synchronously. What breaks?
+Cap concurrency: `flatMap(id -> repo.findById(id), 8)` aligned with R2DBC pool `max-size`. Better: batch query `WHERE id IN (...)` in chunks, or server-side cursor. Never unbounded `flatMap` on per-row network calls.
 
-**Answer.** `WebFilter` runs on event-loop threads. `block()` stalls that loop, delaying all connections handled by it — not just one request. Symptoms: correlated latency spikes, low CPU, few threads blocked in dump. Fix: rewrite filter reactively `chain.filter(exchange).contextWrite(...)` or use resource server JWT support.
+</details>
 
-### 10. How do you test a `Flux` that uses `delayElements` without slow CI?
+<details class="qa-item">
+<summary>7. When is `Schedulers.boundedElastic()` appropriate in WebFlux?</summary>
 
-**Answer.** `StepVerifier.withVirtualTime(() -> flux).thenAwait(Duration.ofMinutes(1)).expectNext(...).verifyComplete()`. Virtual time advances the scheduler without sleeping.
+Short, bounded blocking that cannot yet be removed — legacy JDBC snippet, file read, blocking API — with explicit timeout and monitoring. Not as the default for every repository call. If most handlers need it, the architecture is wrong for WebFlux.
 
-### 11. R2DBC connection pool exhausted while DB shows few active connections. What reactive anti-pattern causes this?
+</details>
 
-**Answer.** Holding a connection across non-DB work in a transactional/reactive chain — e.g. `findById` then long `WebClient` call inside the same transaction before `commit`. Connection returned only after chain completes. Fix: shorten transactions; fetch data then release; then call WebClient.
+<details class="qa-item">
+<summary>8. Explain cold vs hot `Flux` in the context of a live dashboard feeding 1,000 browser tabs.</summary>
 
-### 12. Should you use RouterFunctions or `@RestController` for a public REST API with OpenAPI requirements?
+Cold: each tab's subscription triggers a new upstream source (disastrous — 1,000 DB queries). Hot: single shared source multicasted via `publish().refCount()` or `Sinks.Many` fed by one DB poll pushes to all subscribers. Choose hot with backpressure strategy (buffer/drop/latest) based on SLA.
 
-**Answer.** `@RestController` unless team strongly prefers functional style — springdoc OpenAPI, validation, and method security are smoother. RouterFunctions excel for gateway-style routing, simple proxies, or when composing routes programmatically. Mixed styles OK across modules, not on same paths.
+</details>
 
-### 13. Boot 3.2 offers virtual threads. Your WebFlux service uses `boundedElastic` for all JPA calls. What do you recommend?
+<details class="qa-item">
+<summary>9. A junior adds `.block()` in a `WebFilter` to read the JWT claim synchronously. What breaks?</summary>
 
-**Answer.** Re-evaluate stack choice. The service is servlet-style blocking with reactive tax. Pilot servlet + virtual threads + JPA on a branch; compare p99, CPU, dev velocity. Likely outcome: revert CRUD services to MVC; keep WebFlux for true streaming/orchestration services.
+`WebFilter` runs on event-loop threads. `block()` stalls that loop, delaying all connections handled by it — not just one request. Symptoms: correlated latency spikes, low CPU, few threads blocked in dump. Fix: rewrite filter reactively `chain.filter(exchange).contextWrite(...)` or use resource server JWT support.
 
-### 14. Client reports intermittent empty JSON `{}` with HTTP 200 on errors. Where do you look?
+</details>
 
-**Answer.** Search `onErrorResume(e -> Mono.empty())`, `switchIfEmpty(Mono.just(default))` masking failures, or `@ControllerAdvice` not handling reactive errors. Add metrics on error signals; ensure `ProblemDetail` responses for failures.
+<details class="qa-item">
+<summary>10. How do you test a `Flux` that uses `delayElements` without slow CI?</summary>
 
-### 15. How does backpressure propagate from a slow HTTP client reading SSE to an R2DBC `Flux` query?
+`StepVerifier.withVirtualTime(() -> flux).thenAwait(Duration.ofMinutes(1)).expectNext(...).verifyComplete()`. Virtual time advances the scheduler without sleeping.
 
-**Answer.** Slow TCP write → Netty writability → `Flux` demand reduced via Reactive Streams `request`. R2DBC driver fetches fewer rows. If someone inserted `publishOn` with large prefetch or `onBackpressureBuffer`, backpressure breaks and memory grows. Audit operator chain.
+</details>
 
-### 16. What is wrong with creating `WebClient.create()` per request in a `@Component`?
+<details class="qa-item">
+<summary>11. R2DBC connection pool exhausted while DB shows few active connections. What reactive anti-pattern causes this?</summary>
 
-**Answer.** No connection pooling; new TCP connections each time; TLS handshake overhead; risk of ephemeral port exhaustion. Use a single bean `WebClient` with shared `ConnectionProvider`.
+Holding a connection across non-DB work in a transactional/reactive chain — e.g. `findById` then long `WebClient` call inside the same transaction before `commit`. Connection returned only after chain completes. Fix: shorten transactions; fetch data then release; then call WebClient.
 
-### 17. WebSocket connections drop at exactly 60 seconds behind ALB. Fix?
+</details>
 
-**Answer.** ALB idle timeout default 60s. Send WebSocket ping frames or application heartbeat every <60s. May also need to increase ALB idle timeout for long-lived connections.
+<details class="qa-item">
+<summary>12. Should you use RouterFunctions or `@RestController` for a public REST API with OpenAPI requirements?</summary>
 
-### 18. `StepVerifier` passes but `WebTestClient` fails with 404. Why?
+`@RestController` unless team strongly prefers functional style — springdoc OpenAPI, validation, and method security are smoother. RouterFunctions excel for gateway-style routing, simple proxies, or when composing routes programmatically. Mixed styles OK across modules, not on same paths.
 
-**Answer.** Slice test doesn't load `RouterFunction` or security `pathMatchers`. Controller not in `@WebFluxTest` slice. Context path / gateway prefix not applied in test. Import missing config beans.
+</details>
 
-### 19. How do you implement idempotent POST in WebFlux?
+<details class="qa-item">
+<summary>13. Boot 3.2 offers virtual threads. Your WebFlux service uses `boundedElastic` for all JPA calls. What do you recommend?</summary>
 
-**Answer.** Client sends `Idempotency-Key` header. Store key → result in Redis/DB with TTL. `flatMap` claim key atomically; if already processed return cached response; else execute `save` once. Do not rely on Reactor `retry()` alone.
+Re-evaluate stack choice. The service is servlet-style blocking with reactive tax. Pilot servlet + virtual threads + JPA on a branch; compare p99, CPU, dev velocity. Likely outcome: revert CRUD services to MVC; keep WebFlux for true streaming/orchestration services.
 
-### 20. Name four signals in a thread dump that indicate WebFlux is misused as blocking MVC.
+</details>
 
-**Answer.** (1) `reactor-http-nio-*` blocked in `java.sql` or `SocketInputStream.read`. (2) Large `boundedElastic` queue in heap. (3) Many threads in `jdbc` pool waiting while event loops idle. (4) `block()` in stack frames on netty event loop (BlockHound).
+<details class="qa-item">
+<summary>14. Client reports intermittent empty JSON `{}` with HTTP 200 on errors. Where do you look?</summary>
 
-### 21. Your `@Scheduled` job returns `Mono<Void>` from a reactive repository but data never updates. Why?
+Search `onErrorResume(e -> Mono.empty())`, `switchIfEmpty(Mono.just(default))` masking failures, or `@ControllerAdvice` not handling reactive errors. Add metrics on error signals; ensure `ProblemDetail` responses for failures.
 
-**Answer.** Spring's scheduler invoked the method but nothing subscribed to the returned `Mono`. Unlike MVC controllers, scheduled methods are not auto-subscribed. Fix: return `void` and call `.subscribe()` explicitly with error handler, use `Schedulers.boundedElastic()` inside, or switch to `ApplicationRunner` / `CommandLineRunner` with explicit subscription and metrics on failure.
+</details>
 
-### 22. Actuator `/health` shows UP but all API calls hang. What WebFlux-specific cause do you check?
+<details class="qa-item">
+<summary>15. How does backpressure propagate from a slow HTTP client reading SSE to an R2DBC `Flux` query?</summary>
 
-**Answer.** All event-loop threads blocked — health endpoint may run on separate management port/thread and still pass. Thread dump `reactor-http-nio-*` blocked. Often JDBC `block()` in a filter or shared initialization. BlockHound history or recent deploy adding synchronous call in `WebFilter`.
+Slow TCP write → Netty writability → `Flux` demand reduced via Reactive Streams `request`. R2DBC driver fetches fewer rows. If someone inserted `publishOn` with large prefetch or `onBackpressureBuffer`, backpressure breaks and memory grows. Audit operator chain.
 
-### 23. How do you propagate a tenant ID from `X-Tenant-Id` header through a `WebClient` call to a downstream service in WebFlux?
+</details>
 
-**Answer.** Read header in `WebFilter`, `contextWrite(Context.of("tenantId", value))`. In service, `Mono.deferContextual(ctx -> ...)`. WebClient filter: `Mono.deferContextual(ctx -> ClientRequest.from(req).header("X-Tenant-Id", ctx.get("tenantId")).build())`. Do not use `ThreadLocal`. Enable context propagation for tracing alignment.
+<details class="qa-item">
+<summary>16. What is wrong with creating `WebClient.create()` per request in a `@Component`?</summary>
 
-### 24. `ResponseEntity<Mono<Order>>` vs `Mono<ResponseEntity<Order>>` — which do you return and why?
+No connection pooling; new TCP connections each time; TLS handshake overhead; risk of ephemeral port exhaustion. Use a single bean `WebClient` with shared `ConnectionProvider`.
 
-**Answer.** Prefer `Mono<ResponseEntity<Order>>` — status and headers are decided inside the reactive chain (e.g. `switchIfEmpty` → 404). `ResponseEntity<Mono<Order>>` works but defers status selection until subscribe and confuses exception handlers. For streaming, `Mono<ResponseEntity<Flux<Order>>>` with `body(flux, Order.class)`.
+</details>
 
-### 25. Production metric: `reactor.netty.connection.provider.pending.connections` steadily increasing. Interpret and act.
+<details class="qa-item">
+<summary>17. WebSocket connections drop at exactly 60 seconds behind ALB. Fix?</summary>
 
-**Answer.** More requests waiting for a connection than the pool can grant — pool too small, slow downstream holding connections, or connection leak (body not consumed). Increase pool only after ruling out leak; cap `flatMap` concurrency; set `pendingAcquireTimeout` to fail fast; alert on metric before clients see multi-minute hangs.
+ALB idle timeout default 60s. Send WebSocket ping frames or application heartbeat every <60s. May also need to increase ALB idle timeout for long-lived connections.
+
+</details>
+
+<details class="qa-item">
+<summary>18. `StepVerifier` passes but `WebTestClient` fails with 404. Why?</summary>
+
+Slice test doesn't load `RouterFunction` or security `pathMatchers`. Controller not in `@WebFluxTest` slice. Context path / gateway prefix not applied in test. Import missing config beans.
+
+</details>
+
+<details class="qa-item">
+<summary>19. How do you implement idempotent POST in WebFlux?</summary>
+
+Client sends `Idempotency-Key` header. Store key → result in Redis/DB with TTL. `flatMap` claim key atomically; if already processed return cached response; else execute `save` once. Do not rely on Reactor `retry()` alone.
+
+</details>
+
+<details class="qa-item">
+<summary>20. Name four signals in a thread dump that indicate WebFlux is misused as blocking MVC.</summary>
+
+(1) `reactor-http-nio-*` blocked in `java.sql` or `SocketInputStream.read`. (2) Large `boundedElastic` queue in heap. (3) Many threads in `jdbc` pool waiting while event loops idle. (4) `block()` in stack frames on netty event loop (BlockHound).
+
+</details>
+
+<details class="qa-item">
+<summary>21. Your `@Scheduled` job returns `Mono<Void>` from a reactive repository but data never updates. Why?</summary>
+
+Spring's scheduler invoked the method but nothing subscribed to the returned `Mono`. Unlike MVC controllers, scheduled methods are not auto-subscribed. Fix: return `void` and call `.subscribe()` explicitly with error handler, use `Schedulers.boundedElastic()` inside, or switch to `ApplicationRunner` / `CommandLineRunner` with explicit subscription and metrics on failure.
+
+</details>
+
+<details class="qa-item">
+<summary>22. Actuator `/health` shows UP but all API calls hang. What WebFlux-specific cause do you check?</summary>
+
+All event-loop threads blocked — health endpoint may run on separate management port/thread and still pass. Thread dump `reactor-http-nio-*` blocked. Often JDBC `block()` in a filter or shared initialization. BlockHound history or recent deploy adding synchronous call in `WebFilter`.
+
+</details>
+
+<details class="qa-item">
+<summary>23. How do you propagate a tenant ID from `X-Tenant-Id` header through a `WebClient` call to a downstream service in WebFlux?</summary>
+
+Read header in `WebFilter`, `contextWrite(Context.of("tenantId", value))`. In service, `Mono.deferContextual(ctx -> ...)`. WebClient filter: `Mono.deferContextual(ctx -> ClientRequest.from(req).header("X-Tenant-Id", ctx.get("tenantId")).build())`. Do not use `ThreadLocal`. Enable context propagation for tracing alignment.
+
+</details>
+
+<details class="qa-item">
+<summary>24. `ResponseEntity<Mono<Order>>` vs `Mono<ResponseEntity<Order>>` — which do you return and why?</summary>
+
+Prefer `Mono<ResponseEntity<Order>>` — status and headers are decided inside the reactive chain (e.g. `switchIfEmpty` → 404). `ResponseEntity<Mono<Order>>` works but defers status selection until subscribe and confuses exception handlers. For streaming, `Mono<ResponseEntity<Flux<Order>>>` with `body(flux, Order.class)`.
+
+</details>
+
+<details class="qa-item">
+<summary>25. Production metric: `reactor.netty.connection.provider.pending.connections` steadily increasing. Interpret and act.</summary>
+
+More requests waiting for a connection than the pool can grant — pool too small, slow downstream holding connections, or connection leak (body not consumed). Increase pool only after ruling out leak; cap `flatMap` concurrency; set `pendingAcquireTimeout` to fail fast; alert on metric before clients see multi-minute hangs.
+
+</details>
 
 ---
 

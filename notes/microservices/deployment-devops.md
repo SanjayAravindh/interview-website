@@ -32,7 +32,6 @@ The focus is container platforms, release mechanics, configuration/secrets hygie
 22. [Database Deployment Strategies](#22-database-deployment-strategies)
 23. [Production Debugging Playbook](#23-production-debugging-playbook)
 24. [Quick Decision Matrix](#24-quick-decision-matrix)
-25. [Scenario-Based Questions](#25-scenario-based-questions)
 
 ---
 
@@ -2495,9 +2494,10 @@ Next update: 14:30 UTC
 
 ---
 
-## 25. Scenario-Based Questions
+## Practice Questions & Answers
 
-### Q1. Deploy succeeds but Ingress returns 502 for ten minutes. Pods show Running and Ready. What do you check?
+<details class="qa-item">
+<summary>1. Deploy succeeds but Ingress returns 502 for ten minutes. Pods show Running and Ready. What do you check?</summary>
 
 **Root cause pattern:** Service **`targetPort` mismatch**, Ingress backend pointing to wrong Service/port, or Endpoints empty due to **selector label typo** while probes hit a different port (management sidecar).
 
@@ -2505,7 +2505,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q2. After enabling NetworkPolicy default-deny, all services fail DNS resolution. Why?
+</details>
+
+<details class="qa-item">
+<summary>2. After enabling NetworkPolicy default-deny, all services fail DNS resolution. Why?</summary>
 
 **Root cause:** Egress to **kube-dns** (UDP/TCP 53) not allowed. Policies are enforced by CNI; without DNS allow, `inventory-service.checkout.svc.cluster.local` fails intermittently or always.
 
@@ -2513,7 +2516,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q3. Team updates ConfigMap log level but running pods unchanged. Is Kubernetes broken?
+</details>
+
+<details class="qa-item">
+<summary>3. Team updates ConfigMap log level but running pods unchanged. Is Kubernetes broken?</summary>
 
 **Root cause:** ConfigMap updates **do not restart pods**. Env vars injected at start are immutable. File mounts may update but Spring Boot does not reload without refresh endpoint or restart.
 
@@ -2521,7 +2527,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q4. Rolling deploy of single-replica service causes user-visible downtime. Expected?
+</details>
+
+<details class="qa-item">
+<summary>4. Rolling deploy of single-replica service causes user-visible downtime. Expected?</summary>
 
 **Root cause:** Yes — with **one replica** and `RollingUpdate`, unless surge creates second pod first (`maxSurge ≥ 1` and cluster capacity), old pod terminates before new is ready.
 
@@ -2529,7 +2538,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q5. Flyway migration runs on every pod startup; deploy sometimes hangs on migration lock. Fix?
+</details>
+
+<details class="qa-item">
+<summary>5. Flyway migration runs on every pod startup; deploy sometimes hangs on migration lock. Fix?</summary>
 
 **Root cause:** **Concurrent migration** from N replicas — Flyway advisory lock contention; race on startup.
 
@@ -2537,7 +2549,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q6. Canary at 5% shows 0.01% errors; at 50% payment failures spike. Canary lied?
+</details>
+
+<details class="qa-item">
+<summary>6. Canary at 5% shows 0.01% errors; at 50% payment failures spike. Canary lied?</summary>
 
 **Root cause:** Sample size too small for **rare path**; downstream rate limits; cache warming; **anti-affinity** causing canary pods on weak nodes only at low weight.
 
@@ -2545,7 +2560,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q7. Blue-green switch completed in 30 seconds but users report errors for 5 minutes.
+</details>
+
+<details class="qa-item">
+<summary>7. Blue-green switch completed in 30 seconds but users report errors for 5 minutes.</summary>
 
 **Root cause:** **DNS TTL** caching old IP; mobile app connection pool; **websocket** sticky sessions; CDN cache of error responses.
 
@@ -2553,7 +2571,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q8. GitOps auto-sync removed production Ingress during refactor. Prevention?
+</details>
+
+<details class="qa-item">
+<summary>8. GitOps auto-sync removed production Ingress during refactor. Prevention?</summary>
 
 **Root cause:** `prune: true` + resource deleted from Git; or wrong Application path.
 
@@ -2561,7 +2582,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q9. New pods OOMKilled immediately; local Docker run fine with same JAR.
+</details>
+
+<details class="qa-item">
+<summary>9. New pods OOMKilled immediately; local Docker run fine with same JAR.</summary>
 
 **Root cause:** JVM **heap larger than cgroup memory limit**; missing `UseContainerSupport`/`MaxRAMPercentage`; fixed `-Xmx2g` with 512Mi limit.
 
@@ -2569,7 +2593,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q10. Continuous Deployment vs Continuous Delivery — which for a bank's payment API?
+</details>
+
+<details class="qa-item">
+<summary>10. Continuous Deployment vs Continuous Delivery — which for a bank's payment API?</summary>
 
 **Root cause pattern (interview):** Regulatory change control, audit trails, and human accountability favor **Continuous Delivery** — automated pipeline to prod-ready artifact with **manual promotion** and evidence. Continuous Deployment can exist for lower-risk internal services with same rigor.
 
@@ -2577,7 +2604,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q11. Schema migration adds `NOT NULL` column without default on 50M row table. Deploy Friday. Outcome?
+</details>
+
+<details class="qa-item">
+<summary>11. Schema migration adds `NOT NULL` column without default on 50M row table. Deploy Friday. Outcome?</summary>
 
 **Root cause:** Table rewrite lock or migration failure; **backward incompatibility** if migration runs before expand phase complete.
 
@@ -2585,7 +2615,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q12. Two versions running during roll; v1 consumers fail on Kafka events from v2. Why?
+</details>
+
+<details class="qa-item">
+<summary>12. Two versions running during roll; v1 consumers fail on Kafka events from v2. Why?</summary>
 
 **Root cause:** **Forward compatibility** broken — v2 adds required field or changes semantics; no schema registry compatibility check.
 
@@ -2593,7 +2626,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q13. Helm upgrade stuck on pre-upgrade migration hook Job CrashLoopBackOff. Fleet blocked?
+</details>
+
+<details class="qa-item">
+<summary>13. Helm upgrade stuck on pre-upgrade migration hook Job CrashLoopBackOff. Fleet blocked?</summary>
 
 **Root cause:** Bad SQL in migration; hook has no timeout; `--wait` blocks release.
 
@@ -2601,7 +2637,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q14. Istio mTLS STRICT enabled cluster-wide; legacy VM service breaks. Expected?
+</details>
+
+<details class="qa-item">
+<summary>14. Istio mTLS STRICT enabled cluster-wide; legacy VM service breaks. Expected?</summary>
 
 **Root cause:** VM not in mesh — cannot present client cert. Strict mTLS rejects plain HTTP from legacy.
 
@@ -2609,7 +2648,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q15. Feature flag "new-checkout" enabled for 100% but rollback deploy still needed for bug. Why aren't flags enough?
+</details>
+
+<details class="qa-item">
+<summary>15. Feature flag "new-checkout" enabled for 100% but rollback deploy still needed for bug. Why aren't flags enough?</summary>
 
 **Root cause:** Bug in **shared code path** outside flag guard; memory leak; dependency upgrade; flag evaluation doesn't cover failing branch; flag service latency caused fallback bug.
 
@@ -2617,7 +2659,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q16. Terraform apply changed node group IAM; new pods ImagePullBackOff. Link?
+</details>
+
+<details class="qa-item">
+<summary>16. Terraform apply changed node group IAM; new pods ImagePullBackOff. Link?</summary>
 
 **Root cause:** Node group lost **ECR pull permissions** or VPC endpoint policy broke private ECR access.
 
@@ -2625,7 +2670,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q17. Zero-downtime claimed but `/actuator/health` liveness includes Kafka. Broker restart killed all pods. Mistake?
+</details>
+
+<details class="qa-item">
+<summary>17. Zero-downtime claimed but `/actuator/health` liveness includes Kafka. Broker restart killed all pods. Mistake?</summary>
 
 **Root cause:** **Liveness must not depend on external systems** — Kafka blip → all pods restart → thundering herd → extended outage.
 
@@ -2633,7 +2681,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q18. Argo CD and HPA both modify Deployment replicas; sync flapping. Fix?
+</details>
+
+<details class="qa-item">
+<summary>18. Argo CD and HPA both modify Deployment replicas; sync flapping. Fix?</summary>
 
 **Root cause:** Git declares `replicas: 3`; HPA scales to 10; Argo self-heal resets to 3.
 
@@ -2641,7 +2692,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q19. Backward compatible API change — which is safe during rolling deploy?
+</details>
+
+<details class="qa-item">
+<summary>19. Backward compatible API change — which is safe during rolling deploy?</summary>
 
 **Root cause pattern:** Adding **optional** response field and **optional** request field with server ignoring unknowns is safe. Removing/renaming/tightening validation is not.
 
@@ -2649,7 +2703,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q20. Database expand-contract — when is it safe to DROP old column?
+</details>
+
+<details class="qa-item">
+<summary>20. Database expand-contract — when is it safe to DROP old column?</summary>
 
 **Root cause pattern:** Only when **no running pod** reads/writes old column — verify via deployment revision, metrics labels, and Kafka consumer lag for events referencing old shape.
 
@@ -2657,7 +2714,10 @@ Next update: 14:30 UTC
 
 ---
 
-### Q21. CI builds `:latest` and prod manifest says `:latest`. Rollback how?
+</details>
+
+<details class="qa-item">
+<summary>21. CI builds `:latest` and prod manifest says `:latest`. Rollback how?</summary>
 
 **Root cause:** **Mutable tag** — `:latest` now points to broken image; previous digest unknown unless registry retention/list.
 
@@ -2665,16 +2725,19 @@ Next update: 14:30 UTC
 
 ---
 
-### Q22. Spring `server.shutdown=graceful` but requests still fail on deploy. Missing piece?
+</details>
+
+<details class="qa-item">
+<summary>22. Spring `server.shutdown=graceful` but requests still fail on deploy. Missing piece?</summary>
 
 **Root cause:** No **`preStop` sleep** — kubelet removes Endpoints concurrently with SIGTERM; LB still sends traffic. `terminationGracePeriodSeconds` too short for long requests.
 
 **Fix:** preStop `sleep 5`; terminationGracePeriodSeconds 60; readiness fails on shutdown hook; align LB deregistration delay.
+
+</details>
 
 ---
 
 *Deploying microservices is a contract between immutable artifacts, compatible schemas, honest health signals, and a release strategy that matches your risk. If you cannot name the digest running in prod, the migration phase you are in, and the rollback command — you are not doing zero-downtime; you are hoping.*
 
 ---
-
-

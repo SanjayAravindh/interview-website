@@ -20,7 +20,6 @@ The focus is requests/limits, QoS and eviction, autoscaling at pod/node/cluster 
 10. [JVM and Workload-Specific Sizing](#10-jvm-and-workload-specific-sizing)
 11. [Production Debugging Playbook](#11-production-debugging-playbook)
 12. [Quick Decision Matrix](#12-quick-decision-matrix)
-13. [Scenario-Based Questions](#13-scenario-based-questions)
 
 ---
 
@@ -1334,9 +1333,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-## 13. Scenario-Based Questions
+## Practice Questions & Answers
 
-### Q1. HPA shows desired replicas 20, but only 12 Running; eight Pending. What happened?
+<details class="qa-item">
+<summary>1. HPA shows desired replicas 20, but only 12 Running; eight Pending. What happened?</summary>
 
 **Root cause pattern:** Scheduler cannot place pods — **Insufficient cpu/memory**, **ResourceQuota**, or **Cluster Autoscaler at maxSize**. HPA did its job; placement failed downstream.
 
@@ -1344,7 +1344,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q2. Pods OOMKilled with limit 1Gi and `-Xmx1g`. Local Docker works. Why?
+</details>
+
+<details class="qa-item">
+<summary>2. Pods OOMKilled with limit 1Gi and `-Xmx1g`. Local Docker works. Why?</summary>
 
 **Root cause:** JVM heap is 1 Gi inside a 1 Gi **container** limit — no room for metaspace, threads, native memory, GC overhead. Cgroup kills container (137).
 
@@ -1352,7 +1355,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q3. HPA CPU utilization stuck at 15% but users report slow responses. HPA won't scale. Correct?
+</details>
+
+<details class="qa-item">
+<summary>3. HPA CPU utilization stuck at 15% but users report slow responses. HPA won't scale. Correct?</summary>
 
 **Root cause:** CPU is wrong signal — I/O bound (DB/API), **CPU throttling** at low absolute usage, thread pool exhaustion, or **requests set too high** (denominator inflates, utilization looks low).
 
@@ -1360,7 +1366,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q4. After enabling HPA, Argo CD keeps resetting replicas to 3. Who wins?
+</details>
+
+<details class="qa-item">
+<summary>4. After enabling HPA, Argo CD keeps resetting replicas to 3. Who wins?</summary>
 
 **Root cause:** GitOps **selfHeal** on Deployment `spec.replicas` fights HPA scale subresource.
 
@@ -1368,7 +1377,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q5. `kubectl drain` hangs on a node. PDB shows DisruptionsAllowed: 0. Steps?
+</details>
+
+<details class="qa-item">
+<summary>5. `kubectl drain` hangs on a node. PDB shows DisruptionsAllowed: 0. Steps?</summary>
 
 **Root cause:** Too few **Ready** pods vs `minAvailable`, or one pod Not Ready reducing available count.
 
@@ -1376,7 +1388,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q6. Cluster Autoscaler adds nodes but pods stay Pending. CA bug?
+</details>
+
+<details class="qa-item">
+<summary>6. Cluster Autoscaler adds nodes but pods stay Pending. CA bug?</summary>
 
 **Root cause pattern:** New nodes don't match **nodeSelector/taint**, pod **too large** for instance type, **affinity/topology spread** impossible, or **GPU/resource** mismatch — CA simulated scheduling still fails.
 
@@ -1384,7 +1399,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q7. VPA Auto enabled; pods evicted during business hours; latency spikes. Expected?
+</details>
+
+<details class="qa-item">
+<summary>7. VPA Auto enabled; pods evicted during business hours; latency spikes. Expected?</summary>
 
 **Root cause:** VPA **Recreate/Auto** evicts to apply new resources; concurrent evictions bounded by PDB but still hurt tail latency.
 
@@ -1392,7 +1410,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q8. Memory HPA scales 5 → 30 replicas; total memory usage climbs; OOM on nodes. Why?
+</details>
+
+<details class="qa-item">
+<summary>8. Memory HPA scales 5 → 30 replicas; total memory usage climbs; OOM on nodes. Why?</summary>
 
 **Root cause:** Each replica holds **full in-memory cache** — memory per request doesn't improve with more pods; aggregate memory rises.
 
@@ -1400,7 +1421,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q9. All pods Guaranteed QoS with limits equal requests. Safe?
+</details>
+
+<details class="qa-item">
+<summary>9. All pods Guaranteed QoS with limits equal requests. Safe?</summary>
 
 **Root cause pattern:** Eviction-safe and predictable, but **no CPU burst** — throttling under spike; **expensive** scheduling (low node packing). Good for critical small services; bad default for all Java APIs.
 
@@ -1408,7 +1432,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q10. Namespace ResourceQuota `requests.cpu: 30` — HPA max 50 with 500m request each. Problem?
+</details>
+
+<details class="qa-item">
+<summary>10. Namespace ResourceQuota `requests.cpu: 30` — HPA max 50 with 500m request each. Problem?</summary>
 
 **Root cause:** Max schedulable CPU for namespace = 30 cores regardless of HPA — partial scale ceiling at 60 pods if only CPU counted, but quota stops at 30/0.5 = 60... actually 50×0.5=25 fits. At 500m, 30/0.5=60 max pods. At 1 CPU request, max 30 pods. **Quota must be ≥ HPA max × request.**
 
@@ -1416,7 +1443,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q11. DaemonSet without resources causes app pod evictions. Mechanism?
+</details>
+
+<details class="qa-item">
+<summary>11. DaemonSet without resources causes app pod evictions. Mechanism?</summary>
 
 **Root cause:** Fluent-bit or agent runs **BestEffort**, grows under log load, triggers **MemoryPressure**, kubelet evicts other pods (often Burstable apps first).
 
@@ -1424,7 +1454,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q12. HPA v2 with CPU and memory metrics — CPU says scale up, memory says scale down. Which wins?
+</details>
+
+<details class="qa-item">
+<summary>12. HPA v2 with CPU and memory metrics — CPU says scale up, memory says scale down. Which wins?</summary>
 
 **Root cause:** HPA takes **maximum** desired replica count across metrics — scale-up wins.
 
@@ -1432,7 +1465,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q13. Pod Pending: `0/12 nodes available: 12 Insufficient cpu`. Average node CPU 30% in Grafana. Paradox?
+</details>
+
+<details class="qa-item">
+<summary>13. Pod Pending: `0/12 nodes available: 12 Insufficient cpu`. Average node CPU 30% in Grafana. Paradox?</summary>
 
 **Root cause:** Grafana shows **actual usage**; scheduler uses **requests**. Nodes fully **requested** at 30% actual utilization — common with inflated requests.
 
@@ -1440,7 +1476,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q14. Black Friday: pre-scale HPA minReplicas 3 → 15. Still Pending at peak. Missed what?
+</details>
+
+<details class="qa-item">
+<summary>14. Black Friday: pre-scale HPA minReplicas 3 → 15. Still Pending at peak. Missed what?</summary>
 
 **Root cause:** Pre-scaled **replicas** but not **nodes/quota** — 15 × request may exceed cluster; CA maxSize or quota blocks.
 
@@ -1448,7 +1487,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q15. Java service: VPA recommends 200m CPU request; HPA scales to max at noon. Interaction?
+</details>
+
+<details class="qa-item">
+<summary>15. Java service: VPA recommends 200m CPU request; HPA scales to max at noon. Interaction?</summary>
 
 **Root cause:** Lower request → same absolute CPU = **higher utilization %** → aggressive HPA — classic VPA/HPA CPU fight.
 
@@ -1456,7 +1498,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q16. PDB `minAvailable: 2`, Deployment replicas 2, one pod CrashLoopBackOff. Can drain node?
+</details>
+
+<details class="qa-item">
+<summary>16. PDB `minAvailable: 2`, Deployment replicas 2, one pod CrashLoopBackOff. Can drain node?</summary>
 
 **Root cause:** Only one pod Available; `minAvailable: 2` → **DisruptionsAllowed: 0**.
 
@@ -1464,7 +1509,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q17. Cluster Autoscaler removes nodes over weekend; Monday latency on cold pods. Why?
+</details>
+
+<details class="qa-item">
+<summary>17. Cluster Autoscaler removes nodes over weekend; Monday latency on cold pods. Why?</summary>
 
 **Root cause:** Scale-down evicted pods to fewer nodes; Monday traffic hits **cold JVM** (JIT, caches) on surviving pods; HPA slow to add replicas due to scale-down stabilization.
 
@@ -1472,7 +1520,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q18. LimitRange defaultRequest cpu 500m injected; dev apps work; prod HPA never triggers. Link?
+</details>
+
+<details class="qa-item">
+<summary>18. LimitRange defaultRequest cpu 500m injected; dev apps work; prod HPA never triggers. Link?</summary>
 
 **Root cause:** Prod relied on implicit 500m request; actual usage 100m → HPA sees 20% of target 70%.
 
@@ -1480,7 +1531,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q19. Spot/preemptible nodes + PDB + CA — eviction loop?
+</details>
+
+<details class="qa-item">
+<summary>19. Spot/preemptible nodes + PDB + CA — eviction loop?</summary>
 
 **Root cause pattern:** Spot interruption = **involuntary** (PDB doesn't help); CA adds on-demand; workload reschedules; spot cheap but churn hurts JVM/cache; PDB only affects voluntary drain.
 
@@ -1488,7 +1542,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q20. `kubectl top pod` shows 900Mi memory; limit 1Gi; still OOMKilled. How?
+</details>
+
+<details class="qa-item">
+<summary>20. `kubectl top pod` shows 900Mi memory; limit 1Gi; still OOMKilled. How?</summary>
 
 **Root cause:** **Working set** metric lags spike; sudden allocation (heap, direct buffer) exceeds limit before sampling; or **node-level OOM** if limit unset on another container in pod.
 
@@ -1496,7 +1553,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q21. HPA scale-down removes pods with active WebSocket sessions. User disconnects. Fix?
+</details>
+
+<details class="qa-item">
+<summary>21. HPA scale-down removes pods with active WebSocket sessions. User disconnects. Fix?</summary>
 
 **Root cause:** HPA evicts pods without connection draining; no **preStop** / graceful shutdown; scale-down too fast.
 
@@ -1504,7 +1564,10 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q22. Three zones, topologySpreadConstraints maxSkew 1, HPA scales to 40, Pending pods. Cause?
+</details>
+
+<details class="qa-item">
+<summary>22. Three zones, topologySpreadConstraints maxSkew 1, HPA scales to 40, Pending pods. Cause?</summary>
 
 **Root cause:** Uneven zone capacity or imbalanced node counts — spread constraint can't place pod without violating skew.
 
@@ -1512,21 +1575,32 @@ When scaling or scheduling is "random," it is usually **which controller owns th
 
 ---
 
-### Q23. Interview: requests vs limits — one sentence each for scheduler and kubelet?
+</details>
 
-**Answer:** **Requests** tell the **scheduler** how much capacity to reserve on a node for placement and fair sharing. **Limits** tell the **kubelet** the maximum CPU (throttle) and memory (OOM kill) enforced by cgroups at runtime. Limits do not affect scheduling; requests do not cap usage.
+<details class="qa-item">
+<summary>23. Interview: requests vs limits — one sentence each for scheduler and kubelet?</summary>
 
----
-
-### Q24. Interview: order of eviction for QoS under node memory pressure?
-
-**Answer:** **BestEffort** first (no requests/limits), then **Burstable** pods exceeding memory **requests**, then others; **Guaranteed** last (limits == requests). PriorityClass can override ordering among same QoS.
+**Requests** tell the **scheduler** how much capacity to reserve on a node for placement and fair sharing. **Limits** tell the **kubelet** the maximum CPU (throttle) and memory (OOM kill) enforced by cgroups at runtime. Limits do not affect scheduling; requests do not cap usage.
 
 ---
 
-### Q25. Platform mandates `limits.memory == requests.memory` for all prod pods. Your Java API objection?
+</details>
 
-**Answer:** Equal memory request/limit creates **Guaranteed** QoS (good for eviction) but **zero burst headroom** for JVM native/memory spikes — OOM risk unless limit sized with full native overhead. Prefer equal only after profiling P99 RSS; otherwise request < limit with careful monitoring, or Guaranteed with generously padded limit from load tests.
+<details class="qa-item">
+<summary>24. Interview: order of eviction for QoS under node memory pressure?</summary>
+
+**BestEffort** first (no requests/limits), then **Burstable** pods exceeding memory **requests**, then others; **Guaranteed** last (limits == requests). PriorityClass can override ordering among same QoS.
+
+---
+
+</details>
+
+<details class="qa-item">
+<summary>25. Platform mandates `limits.memory == requests.memory` for all prod pods. Your Java API objection?</summary>
+
+Equal memory request/limit creates **Guaranteed** QoS (good for eviction) but **zero burst headroom** for JVM native/memory spikes — OOM risk unless limit sized with full native overhead. Prefer equal only after profiling P99 RSS; otherwise request < limit with careful monitoring, or Guaranteed with generously padded limit from load tests.
+
+</details>
 
 ---
 

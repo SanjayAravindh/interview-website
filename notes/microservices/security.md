@@ -27,7 +27,6 @@ Spring Boot 3.x / Spring Security 6.x / Spring Cloud 2023.x. Servlet stack and r
 19. [Encryption in Transit](#19-encryption-in-transit)
 20. [Production Debugging Playbook](#20-production-debugging-playbook)
 21. [Quick Decision Matrix](#21-quick-decision-matrix)
-22. [Interview Q&A](#22-interview-qa)
 
 ---
 
@@ -1556,119 +1555,203 @@ When security is "random," it is usually **wrong chain**, **wrong token type**, 
 
 ---
 
-## 22. Interview Q&A
+## Practice Questions & Answers
 
-### Q1. Why must microservices validate JWT at the service layer if the API gateway already validates?
+<details class="qa-item">
+<summary>1. Why must microservices validate JWT at the service layer if the API gateway already validates?</summary>
 
-**A.** Gateway bypass is routine: direct ClusterIP access, misconfigured ingress, debug ports, SSRF from another service, future architecture change without gateway. Defense in depth — each service is a **resource server** that validates `iss`, `aud`, `exp`, and signature. Gateway reduces attack volume; services enforce authorization truth.
+Gateway bypass is routine: direct ClusterIP access, misconfigured ingress, debug ports, SSRF from another service, future architecture change without gateway. Defense in depth — each service is a **resource server** that validates `iss`, `aud`, `exp`, and signature. Gateway reduces attack volume; services enforce authorization truth.
 
-### Q2. What is the difference between authentication and authorization in a distributed system?
+</details>
 
-**A.** **Authentication** proves identity (user JWT, client credentials, mTLS cert). **Authorization** decides if that identity may perform an action on a resource (scopes, roles, OPA policy, owner checks). You can be authenticated (valid token) but forbidden (403) if scope lacks `orders.delete`. Confusing 401 vs 403 misroutes debugging.
+<details class="qa-item">
+<summary>2. What is the difference between authentication and authorization in a distributed system?</summary>
 
-### Q3. When do you use client credentials vs propagating the user JWT?
+**Authentication** proves identity (user JWT, client credentials, mTLS cert). **Authorization** decides if that identity may perform an action on a resource (scopes, roles, OPA policy, owner checks). You can be authenticated (valid token) but forbidden (403) if scope lacks `orders.delete`. Confusing 401 vs 403 misroutes debugging.
 
-**A.** **Client credentials** for **system** actions with no user context (nightly batch, saga compensation, health sync) or when downstream trusts service identity only. **Propagate user JWT** when downstream must enforce **user-level** permissions (user can only see own orders). Prefer **token exchange** to downscope `aud` and scopes for downstream when passing full user token is too broad.
+</details>
 
-### Q4. Explain OAuth2 authorization code flow with PKCE for a mobile app.
+<details class="qa-item">
+<summary>3. When do you use client credentials vs propagating the user JWT?</summary>
 
-**A.** Mobile app is public client (no secret). App generates `code_verifier` / `code_challenge`, opens system browser to IdP authorize URL with `response_type=code`, `scope`, PKCE challenge. User logs in; IdP redirects to app with `code`. App exchanges code + `code_verifier` at token endpoint for access + refresh tokens. PKCE prevents intercepted code from being redeemed without verifier. Store refresh securely (Keychain/Keystore).
+**Client credentials** for **system** actions with no user context (nightly batch, saga compensation, health sync) or when downstream trusts service identity only. **Propagate user JWT** when downstream must enforce **user-level** permissions (user can only see own orders). Prefer **token exchange** to downscope `aud` and scopes for downstream when passing full user token is too broad.
 
-### Q5. What is the difference between an access token and an ID token in OIDC?
+</details>
 
-**A.** **ID token** proves authentication event to the **client** (who logged in); `aud` is client id; not for API access. **Access token** authorizes **resource server** APIs; contains scopes; validated by microservices. Sending ID token to order service is a common misconfiguration — wrong audience and semantics.
+<details class="qa-item">
+<summary>4. Explain OAuth2 authorization code flow with PKCE for a mobile app.</summary>
 
-### Q6. How do you implement multi-tenant authorization in microservices?
+Mobile app is public client (no secret). App generates `code_verifier` / `code_challenge`, opens system browser to IdP authorize URL with `response_type=code`, `scope`, PKCE challenge. User logs in; IdP redirects to app with `code`. App exchanges code + `code_verifier` at token endpoint for access + refresh tokens. PKCE prevents intercepted code from being redeemed without verifier. Store refresh securely (Keychain/Keystore).
 
-**A.** Put `tenant_id` (or org id) in **signed token claim** from IdP. On every request, extract tenant into trusted context after JWT validation. **Every** data access includes tenant predicate — `WHERE tenant_id = ?`. Never trust client `X-Tenant-Id` without matching token. Gateway may route by tenant but service enforces isolation.
+</details>
 
-### Q7. What is mTLS and when would you choose it over Bearer tokens for service-to-service?
+<details class="qa-item">
+<summary>5. What is the difference between an access token and an ID token in OIDC?</summary>
 
-**A.** **mTLS** mutual TLS — client and server present certificates; identity bound to cryptographic key. Choose mTLS (often via mesh) for **uniform east-west encryption + strong peer identity** without passing Bearer through every app. Bearer client-credentials fits **OAuth ecosystem**, fine-grained scopes, and heterogeneous callers outside mesh. Many systems use **both**: mesh mTLS for transport + JWT for user context.
+**ID token** proves authentication event to the **client** (who logged in); `aud` is client id; not for API access. **Access token** authorizes **resource server** APIs; contains scopes; validated by microservices. Sending ID token to order service is a common misconfiguration — wrong audience and semantics.
 
-### Q8. How does token propagation break in async and reactive code?
+</details>
 
-**A.** `SecurityContextHolder` is ThreadLocal — `@Async`, `CompletableFuture`, reactive `publishOn` lose context. Feign/WebClient interceptors read empty context → no `Authorization` header downstream. Fix: capture token on request thread; pass explicitly in saga state; use `DelegatingSecurityContext*` executors; reactive: `ReactiveSecurityContextHolder` + `contextWrite` / `contextCapture`.
+<details class="qa-item">
+<summary>6. How do you implement multi-tenant authorization in microservices?</summary>
 
-### Q9. What claims must you validate on a JWT resource server?
+Put `tenant_id` (or org id) in **signed token claim** from IdP. On every request, extract tenant into trusted context after JWT validation. **Every** data access includes tenant predicate — `WHERE tenant_id = ?`. Never trust client `X-Tenant-Id` without matching token. Gateway may route by tenant but service enforces isolation.
 
-**A.** Signature (via JWKS), `exp`/`nbf`/`iat` with skew, `iss` matches configured issuer, `aud` includes this API (or authorized party), algorithm not `none`. Optionally `azp`, custom `tenant_id`. Map `scope` to authorities. Do not trust claims without signature verification.
+</details>
 
-### Q10. How do you rotate JWT signing keys without downtime?
+<details class="qa-item">
+<summary>7. What is mTLS and when would you choose it over Bearer tokens for service-to-service?</summary>
 
-**A.** Add new key to JWKS with new `kid`; sign new tokens with new key only; keep old key in JWKS until all outstanding access tokens expire (TTL + buffer); resource servers refresh JWKS cache periodically; remove old `kid` after overlap window. For emergency, shorten access token TTL and revoke sessions at IdP if supported.
+**mTLS** mutual TLS — client and server present certificates; identity bound to cryptographic key. Choose mTLS (often via mesh) for **uniform east-west encryption + strong peer identity** without passing Bearer through every app. Bearer client-credentials fits **OAuth ecosystem**, fine-grained scopes, and heterogeneous callers outside mesh. Many systems use **both**: mesh mTLS for transport + JWT for user context.
 
-### Q11. What is zero trust architecture in microservices?
+</details>
 
-**A.** No implicit trust by network location. Every workload and user request is **authenticated and authorized**. Encrypt traffic, least-privilege scopes, short-lived credentials, assume breach (segmentation, audit). Implemented via gateway auth, mesh mTLS, per-service resource servers, Vault secrets, and CI tests proving unauthenticated calls fail.
+<details class="qa-item">
+<summary>8. How does token propagation break in async and reactive code?</summary>
 
-### Q12. How do you manage secrets in Kubernetes microservices?
+`SecurityContextHolder` is ThreadLocal — `@Async`, `CompletableFuture`, reactive `publishOn` lose context. Feign/WebClient interceptors read empty context → no `Authorization` header downstream. Fix: capture token on request thread; pass explicitly in saga state; use `DelegatingSecurityContext*` executors; reactive: `ReactiveSecurityContextHolder` + `contextWrite` / `contextCapture`.
 
-**A.** Never plain secrets in git. Use **Vault** or cloud secret manager with **External Secrets Operator** syncing to K8s Secrets. Mount as files or env; rotate via Vault dynamic secrets or scheduled rotation. Restrict RBAC `get secrets`. Sanitize Actuator. One secret per service/client — no shared prod password across 40 apps.
+</details>
 
-### Q13. When is CSRF a risk in microservices and when do you disable it?
+<details class="qa-item">
+<summary>9. What claims must you validate on a JWT resource server?</summary>
 
-**A.** **Risk:** browser cookie-based sessions (BFF) — attacker site triggers state-changing POST with victim's cookie. **Disable CSRF** on **stateless JWT APIs** where browser does not auto-send token (Authorization header only). Separate Spring Security chains for web vs API. Cross-site cookie auth needs SameSite + CSRF tokens.
+Signature (via JWKS), `exp`/`nbf`/`iat` with skew, `iss` matches configured issuer, `aud` includes this API (or authorized party), algorithm not `none`. Optionally `azp`, custom `tenant_id`. Map `scope` to authorities. Do not trust claims without signature verification.
 
-### Q14. How should CORS be configured in a microservices architecture?
+</details>
 
-**A.** Prefer **single entry** (gateway or BFF) for browser CORS — not duplicated on every service. Explicit `allowedOrigins` list per environment; never `*` with `allowCredentials`. Ensure CORS filter runs **before** auth so 401 responses include CORS headers. Internal service-to-service calls are not CORS — no headers needed.
+<details class="qa-item">
+<summary>10. How do you rotate JWT signing keys without downtime?</summary>
 
-### Q15. What is encryption at rest vs encryption in transit?
+Add new key to JWKS with new `kid`; sign new tokens with new key only; keep old key in JWKS until all outstanding access tokens expire (TTL + buffer); resource servers refresh JWKS cache periodically; remove old `kid` after overlap window. For emergency, shorten access token TTL and revoke sessions at IdP if supported.
 
-**A.** **In transit:** TLS/mTLS protects data on the network between client-server and service-service — prevents wire sniffing. **At rest:** encryption on disk, DB TDE, backup encryption, field-level PII encryption — protects stolen drives/backups. Both required; neither stops compromised app reading live data. Keys for at-rest often in KMS/Vault.
+</details>
 
-### Q16. How do you secure an API gateway in production?
+<details class="qa-item">
+<summary>11. What is zero trust architecture in microservices?</summary>
 
-**A.** Validate JWT (iss, aud, sig), rate limit per IP/client_id, WAF rules, TLS termination with modern ciphers, request size limits, strip sensitive headers from clients, optional mTLS for partners, route to internal services only, no Actuator exposure, audit access logs, separate admin config, TokenRelay only when appropriate.
+No implicit trust by network location. Every workload and user request is **authenticated and authorized**. Encrypt traffic, least-privilege scopes, short-lived credentials, assume breach (segmentation, audit). Implemented via gateway auth, mesh mTLS, per-service resource servers, Vault secrets, and CI tests proving unauthenticated calls fail.
 
-### Q17. What is OAuth2 token exchange (RFC 8693) and why use it?
+</details>
 
-**A.** Trade one token for another with different `aud`, scope, or subject — e.g. BFF exchanges user token for inventory-scoped token. Reduces pass-through of over-privileged JWT. Keycloak and Spring Authorization Server support variants. Use when downstream should not accept full user token from another audience.
+<details class="qa-item">
+<summary>12. How do you manage secrets in Kubernetes microservices?</summary>
 
-### Q18. How do certificate expiry incidents happen in microservices and how to prevent them?
+Never plain secrets in git. Use **Vault** or cloud secret manager with **External Secrets Operator** syncing to K8s Secrets. Mount as files or env; rotate via Vault dynamic secrets or scheduled rotation. Restrict RBAC `get secrets`. Sanitize Actuator. One secret per service/client — no shared prod password across 40 apps.
 
-**A.** Causes: manual 1-year certs without monitoring, failed cert-manager renewal, mesh CA misconfig, forgotten internal CA. Prevention: cert-manager with alerts 30/7/1 days, automated mesh cert rotation, runbooks, integration tests on TLS connect, never bake certs in images, overlap during rotation.
+</details>
 
-### Q19. What is the BFF pattern for security?
+<details class="qa-item">
+<summary>13. When is CSRF a risk in microservices and when do you disable it?</summary>
 
-**A.** **Backend for Frontend** — browser talks only to BFF (same origin). BFF holds OAuth tokens server-side in session or encrypted store; microservices never exposed to browser directly. Simplifies CORS/CSRF, hides client secrets, enables token exchange per downstream. Tradeoff: BFF becomes critical tier — scale and secure it like a gateway.
+**Risk:** browser cookie-based sessions (BFF) — attacker site triggers state-changing POST with victim's cookie. **Disable CSRF** on **stateless JWT APIs** where browser does not auto-send token (Authorization header only). Separate Spring Security chains for web vs API. Cross-site cookie auth needs SameSite + CSRF tokens.
 
-### Q20. How do you detect horizontal privilege escalation in microservices?
+</details>
 
-**A.** Integration tests: user A token cannot read user B resource id. Code review: every `findById` has tenant/owner check. Pen test IDOR on sequential ids. Audit logs with `sub` + resource id. `@PreAuthorize` on service layer not only controller. Repository query always includes tenant from token context.
+<details class="qa-item">
+<summary>14. How should CORS be configured in a microservices architecture?</summary>
 
-### Q21. What are SPIFFE and SPIRE in service identity?
+Prefer **single entry** (gateway or BFF) for browser CORS — not duplicated on every service. Explicit `allowedOrigins` list per environment; never `*` with `allowCredentials`. Ensure CORS filter runs **before** auth so 401 responses include CORS headers. Internal service-to-service calls are not CORS — no headers needed.
 
-**A.** **SPIFFE** defines workload identity format (`spiffe://trust/domain/workload`). **SPIRE** issues **SVIDs** (SPIFFE Verifiable Identity Document) — short-lived certs for mTLS. Mesh and platforms use them for **cryptographic service identity** replacing shared API keys. Spring apps often consume via mesh sidecar rather than direct SPIRE SDK.
+</details>
 
-### Q22. How do you handle API key authentication vs OAuth2 for partners?
+<details class="qa-item">
+<summary>15. What is encryption at rest vs encryption in transit?</summary>
 
-**A.** **API keys** simple for low-risk read-only partners — key in header, rate limit, rotate, audit. Weak for fine-grained consent and rotation at scale. **OAuth2 client credentials** better for scopes, standard revocation, audit per client, short-lived tokens. High-trust partners: mTLS + client credentials. Never API key in URL query string.
+**In transit:** TLS/mTLS protects data on the network between client-server and service-service — prevents wire sniffing. **At rest:** encryption on disk, DB TDE, backup encryption, field-level PII encryption — protects stolen drives/backups. Both required; neither stops compromised app reading live data. Keys for at-rest often in KMS/Vault.
 
-### Q23. What Spring Security 6 configuration separates actuator from API security?
+</details>
 
-**A.** Multiple `SecurityFilterChain` beans with `@Order`: `@Order(1)` `securityMatcher("/actuator/**")` with restricted roles or separate management port; `@Order(2)` `securityMatcher("/api/**")` JWT resource server STATELESS; `@Order(3)` web login if needed. First match wins — most specific first.
+<details class="qa-item">
+<summary>16. How do you secure an API gateway in production?</summary>
 
-### Q24. How does a service mesh help security without changing Spring code?
+Validate JWT (iss, aud, sig), rate limit per IP/client_id, WAF rules, TLS termination with modern ciphers, request size limits, strip sensitive headers from clients, optional mTLS for partners, route to internal services only, no Actuator exposure, audit access logs, separate admin config, TokenRelay only when appropriate.
 
-**A.** Sidecar provides **mTLS** east-west, **L4/L7 policy** (which SA can call which), **telemetry** without token in app logs, optional JWT validation at proxy. App may still validate JWT for user authorization — mesh does not replace app-level authZ on user data. Enables STRICT mTLS gradually.
+</details>
 
-### Q25. What should you log for security audit without leaking credentials?
+<details class="qa-item">
+<summary>17. What is OAuth2 token exchange (RFC 8693) and why use it?</summary>
 
-**A.** Log: timestamp, `sub`, `client_id`, tenant, HTTP method/path, decision (allow/deny), trace id, source IP, user agent. **Never** log: full JWT, refresh tokens, passwords, client secrets, decrypted PII. Structured JSON to SIEM. Alert on anomaly: spike 401/403, admin scope from new geo, after-hours bulk export.
+Trade one token for another with different `aud`, scope, or subject — e.g. BFF exchanges user token for inventory-scoped token. Reduces pass-through of over-privileged JWT. Keycloak and Spring Authorization Server support variants. Use when downstream should not accept full user token from another audience.
 
-### Q26. How do you encrypt sensitive database columns in a microservice?
+</details>
 
-**A.** Application-level `AttributeConverter` or transparent helpers calling **Vault Transit** or **KMS GenerateDataKey**. Envelope encryption: KMS wraps DEK, DEK encrypts column. Cache DEKs with TTL. Volume-level RDS encryption is baseline; column encryption protects backup/DBA paths. Key rotation requires re-encrypt job.
+<details class="qa-item">
+<summary>18. How do certificate expiry incidents happen in microservices and how to prevent them?</summary>
 
-### Q27. What is the difference between RBAC and ABAC for microservice authorization?
+Causes: manual 1-year certs without monitoring, failed cert-manager renewal, mesh CA misconfig, forgotten internal CA. Prevention: cert-manager with alerts 30/7/1 days, automated mesh cert rotation, runbooks, integration tests on TLS connect, never bake certs in images, overlap during rotation.
 
-**A.** **RBAC:** roles/scopes (`ROLE_ADMIN`, `SCOPE_orders.read`) — static, easy with OAuth scopes. **ABAC:** attributes (tenant, region, resource owner, time, device trust) — `user.tenant == resource.tenant`. Microservices often combine: scopes for coarse API access, ABAC/ custom `@PreAuthorize` for row-level. OPA/Cedar for complex policy across services.
+</details>
 
-### Q28. Why is trusting internal network IP for authentication dangerous?
+<details class="qa-item">
+<summary>19. What is the BFF pattern for security?</summary>
 
-**A.** IPs are not identity — spoofable in some topologies, shared by many pods via NAT, change on reschedule. Attackers pivot from compromised workload to "internal" IPs. SSRF from public app reaches internal URLs. **Authenticate every call** with token or mTLS regardless of source IP. IP allowlists are adjunct for admin endpoints only.
+**Backend for Frontend** — browser talks only to BFF (same origin). BFF holds OAuth tokens server-side in session or encrypted store; microservices never exposed to browser directly. Simplifies CORS/CSRF, hides client secrets, enables token exchange per downstream. Tradeoff: BFF becomes critical tier — scale and secure it like a gateway.
+
+</details>
+
+<details class="qa-item">
+<summary>20. How do you detect horizontal privilege escalation in microservices?</summary>
+
+Integration tests: user A token cannot read user B resource id. Code review: every `findById` has tenant/owner check. Pen test IDOR on sequential ids. Audit logs with `sub` + resource id. `@PreAuthorize` on service layer not only controller. Repository query always includes tenant from token context.
+
+</details>
+
+<details class="qa-item">
+<summary>21. What are SPIFFE and SPIRE in service identity?</summary>
+
+**SPIFFE** defines workload identity format (`spiffe://trust/domain/workload`). **SPIRE** issues **SVIDs** (SPIFFE Verifiable Identity Document) — short-lived certs for mTLS. Mesh and platforms use them for **cryptographic service identity** replacing shared API keys. Spring apps often consume via mesh sidecar rather than direct SPIRE SDK.
+
+</details>
+
+<details class="qa-item">
+<summary>22. How do you handle API key authentication vs OAuth2 for partners?</summary>
+
+**API keys** simple for low-risk read-only partners — key in header, rate limit, rotate, audit. Weak for fine-grained consent and rotation at scale. **OAuth2 client credentials** better for scopes, standard revocation, audit per client, short-lived tokens. High-trust partners: mTLS + client credentials. Never API key in URL query string.
+
+</details>
+
+<details class="qa-item">
+<summary>23. What Spring Security 6 configuration separates actuator from API security?</summary>
+
+Multiple `SecurityFilterChain` beans with `@Order`: `@Order(1)` `securityMatcher("/actuator/**")` with restricted roles or separate management port; `@Order(2)` `securityMatcher("/api/**")` JWT resource server STATELESS; `@Order(3)` web login if needed. First match wins — most specific first.
+
+</details>
+
+<details class="qa-item">
+<summary>24. How does a service mesh help security without changing Spring code?</summary>
+
+Sidecar provides **mTLS** east-west, **L4/L7 policy** (which SA can call which), **telemetry** without token in app logs, optional JWT validation at proxy. App may still validate JWT for user authorization — mesh does not replace app-level authZ on user data. Enables STRICT mTLS gradually.
+
+</details>
+
+<details class="qa-item">
+<summary>25. What should you log for security audit without leaking credentials?</summary>
+
+Log: timestamp, `sub`, `client_id`, tenant, HTTP method/path, decision (allow/deny), trace id, source IP, user agent. **Never** log: full JWT, refresh tokens, passwords, client secrets, decrypted PII. Structured JSON to SIEM. Alert on anomaly: spike 401/403, admin scope from new geo, after-hours bulk export.
+
+</details>
+
+<details class="qa-item">
+<summary>26. How do you encrypt sensitive database columns in a microservice?</summary>
+
+Application-level `AttributeConverter` or transparent helpers calling **Vault Transit** or **KMS GenerateDataKey**. Envelope encryption: KMS wraps DEK, DEK encrypts column. Cache DEKs with TTL. Volume-level RDS encryption is baseline; column encryption protects backup/DBA paths. Key rotation requires re-encrypt job.
+
+</details>
+
+<details class="qa-item">
+<summary>27. What is the difference between RBAC and ABAC for microservice authorization?</summary>
+
+**RBAC:** roles/scopes (`ROLE_ADMIN`, `SCOPE_orders.read`) — static, easy with OAuth scopes. **ABAC:** attributes (tenant, region, resource owner, time, device trust) — `user.tenant == resource.tenant`. Microservices often combine: scopes for coarse API access, ABAC/ custom `@PreAuthorize` for row-level. OPA/Cedar for complex policy across services.
+
+</details>
+
+<details class="qa-item">
+<summary>28. Why is trusting internal network IP for authentication dangerous?</summary>
+
+IPs are not identity — spoofable in some topologies, shared by many pods via NAT, change on reschedule. Attackers pivot from compromised workload to "internal" IPs. SSRF from public app reaches internal URLs. **Authenticate every call** with token or mTLS regardless of source IP. IP allowlists are adjunct for admin endpoints only.
+
+</details>
 
 ---
 

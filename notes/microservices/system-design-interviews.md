@@ -26,8 +26,7 @@ Assumes you can already explain CAP, consistent hashing, and load balancers. Foc
 16. [Walkthrough: Order Management / Inventory](#15-walkthrough-order-management-inventory)
 17. [General Interview Playbook](#16-general-interview-playbook)
 18. [Quick Decision Matrix](#17-quick-decision-matrix)
-19. [Cross-Cutting Scenario Q&A (20 Questions)](#18-cross-cutting-scenario-qa-20-questions)
-20. [Appendix A–H: Cheat Sheets & Traps](#appendix-a-latency-budget-template)
+19. [Appendix A–H: Cheat Sheets & Traps](#appendix-a-latency-budget-template)
 
 ---
 
@@ -1832,87 +1831,147 @@ Interviewers at product companies love **operational closure**.
 
 ---
 
-## 18. Cross-Cutting Scenario Q&A (20 Questions)
+## Practice Questions & Answers
 
-### 1. How do you handle idempotency for POST requests?
+<details class="qa-item">
+<summary>1. How do you handle idempotency for POST requests?</summary>
 
 Store `Idempotency-Key` + request hash + response body in Postgres or Redis with TTL 24–72h. On duplicate key, return stored response with same status code. Key must include **tenant/user scope** to prevent cross-user collision. PSP and mobile clients retry aggressively — server-side dedup is non-negotiable for payments and orders.
 
-### 2. CAP theorem — how do you actually use it in interviews?
+</details>
+
+<details class="qa-item">
+<summary>2. CAP theorem — how do you actually use it in interviews?</summary>
 
 Don't recite the proof. State: "Under network partition, we choose **consistency** for inventory/payments (refuse stale writes) or **availability** for feeds (serve cached timeline)." Pick based on business cost of each failure mode. Most user-facing read paths choose AP with bounded staleness.
 
-### 3. How would you design for multi-region active-active?
+</details>
+
+<details class="qa-item">
+<summary>3. How would you design for multi-region active-active?</summary>
 
 Split writes by **user home region** (geo-DNS route); async cross-region replication for read elsewhere. Conflict resolution: last-write-wins for profile; **avoid** active-active on same inventory row without CRDT or regional stock pools. Mention CRDB/Spanner for global SQL if budget allows. Most designs: active-passive DR with RPO/RTO targets.
 
-### 4. What's your approach to database sharding?
+</details>
+
+<details class="qa-item">
+<summary>4. What's your approach to database sharding?</summary>
 
 Identify **dominant access pattern** → choose shard key with high cardinality → embed shard id in primary key → use consistent hashing or directory service for routing → plan **resharding** (double-write migration) before you need it. Avoid cross-shard joins; denormalize or aggregate via async jobs.
 
-### 5. How do you prevent cascading failures?
+</details>
+
+<details class="qa-item">
+<summary>5. How do you prevent cascading failures?</summary>
 
 Timeouts on every outbound call ( shorter than client timeout ), circuit breakers, bulkheads (separate thread pools), retry with jitter (max 2–3), load shed at gateway (429), cache fallback for read degradation. **Never** retry non-idempotent POST without idempotency key.
 
-### 6. Explain exactly-once vs at-least-once vs at-most-once.
+</details>
+
+<details class="qa-item">
+<summary>6. Explain exactly-once vs at-least-once vs at-most-once.</summary>
 
 **At-most-once:** fire and forget — may lose messages. **At-least-once:** retry until ack — duplicates possible; consumers must dedup. **Exactly-once:** end-to-end is hard; achieve **effective once** via idempotent consumers + transactional outbox + dedup store. Kafka exactly-once within cluster ≠ exactly-once to external email provider.
 
-### 7. How do you design a unique ID generator at scale?
+</details>
+
+<details class="qa-item">
+<summary>7. How do you design a unique ID generator at scale?</summary>
 
 Snowflake: timestamp + datacenter + worker + sequence → 64-bit sortable ID. Requires worker ID coordination (ZooKeeper, K8s pod index). Alternative: UUID v7 (time-ordered). DB sequences bottleneck at shard scale. Pre-allocated ranges per service instance for insert-heavy paths.
 
-### 8. Cache stampede / thundering herd — mitigation?
+</details>
+
+<details class="qa-item">
+<summary>8. Cache stampede / thundering herd — mitigation?</summary>
 
 Probabilistic early expiration, request coalescing (single-flight), mutex per hot key, pre-warm on deploy, stale-while-revalidate. For viral content, push to CDN edge; local in-process cache in front of Redis.
 
-### 9. How do you sync search index with database?
+</details>
+
+<details class="qa-item">
+<summary>9. How do you sync search index with database?</summary>
 
 Transactional **outbox** in same TX as product update → relay publishes to Kafka → indexer bulk upserts ES. Debezium CDC alternative. Never dual-write to Postgres and ES in application without outbox — drift guaranteed. Nightly reconciliation job compares counts and samples.
 
-### 10. Design a leaderboard (top 10 scores).
+</details>
+
+<details class="qa-item">
+<summary>10. Design a leaderboard (top 10 scores).</summary>
 
 Redis **sorted set** `ZADD leaderboard score user_id`; `ZREVRANGE 0 9` O(log N). For global scale, shard leaderboard by game/season. For write-heavy: batch score updates in memory, flush periodically if slight lag OK. Archive to Postgres for history.
 
-### 11. How do you handle hot keys in Redis?
+</details>
+
+<details class="qa-item">
+<summary>11. How do you handle hot keys in Redis?</summary>
 
 Local L1 cache on app servers, read replicas for Redis (Redis Enterprise), split key into `key:part-{0..N}` with random read, or move counter to dedicated shard. Monitor `redis hot keys` / latency per command.
 
-### 12. WebSocket vs polling vs SSE for real-time?
+</details>
+
+<details class="qa-item">
+<summary>12. WebSocket vs polling vs SSE for real-time?</summary>
 
 **WebSocket:** bidirectional, chat, gaming — connection state expensive at millions. **SSE:** server push one-way, simpler through HTTP proxies. **Polling:** fallback; use long polling sparingly. At scale: WebSocket gateway cluster with sticky sessions or pub/sub backplane (Redis/Kafka).
 
-### 13. How do you design audit logging for compliance?
+</details>
+
+<details class="qa-item">
+<summary>13. How do you design audit logging for compliance?</summary>
 
 Append-only **audit table** or immutable log stream (Kafka → S3/Glacier). Capture who, what, when, before/after snapshot, request_id. WORM storage for retention. Separate from application debug logs; PII redaction pipeline.
 
-### 14. Schema migration without downtime?
+</details>
+
+<details class="qa-item">
+<summary>14. Schema migration without downtime?</summary>
 
 Expand-contract pattern: add nullable column → dual-write → backfill job → switch reads → remove old. For renames, use views or compatibility layer. Never blocking `ALTER` on huge table in peak — use online schema change tools (gh-ost, pg_repack).
 
-### 15. How do you estimate cost in system design?
+</details>
+
+<details class="qa-item">
+<summary>15. How do you estimate cost in system design?</summary>
 
 Compute: `(pods × $/pod/month) + (DB instance) + (Redis) + (Kafka) + (S3 storage + egress) + (ES data nodes)`. Egress often dominates media. Mention **reserved capacity** vs on-demand. One sentence: "Video egress at 1 PB/day is the cost driver — CDN cache hit ratio is a finance metric."
 
-### 16. Monolith vs microservices for MVP?
+</details>
+
+<details class="qa-item">
+<summary>16. Monolith vs microservices for MVP?</summary>
 
 **Monolith modular** (clear package boundaries) until team > ~8–10 engineers or deploy cadence blocked. Split on **scaling** or **ownership** boundaries first (payments, media processing). Interview answer: "I'd start modular monolith + Postgres + Redis; extract notification worker first because it's async and independently scalable."
 
-### 17. How do you design graceful degradation?
+</details>
+
+<details class="qa-item">
+<summary>17. How do you design graceful degradation?</summary>
 
 Define tiers: core (checkout), enhanced (recommendations), cosmetic (view counts). Under load, disable enhanced first via feature flag. Return cached/default for non-critical data. Queue writes if DB slow (careful with user-visible delay). Communicate degraded mode in status page.
 
-### 18. Distributed lock — when and how?
+</details>
+
+<details class="qa-item">
+<summary>18. Distributed lock — when and how?</summary>
 
 Use sparingly — prefer **atomic DB update** or idempotent consumer. When needed: Redis Redlock with TTL + fencing token, or Postgres advisory lock. Always set TTL to prevent dead lock holder. Locks don't replace correct transaction boundaries.
 
-### 19. How do you test a system design?
+</details>
+
+<details class="qa-item">
+<summary>19. How do you test a system design?</summary>
 
 Load test hot path (k6, Gatling); chaos on Redis/DB failover; idempotency replay tests; contract tests between services; game days for regional failover. Mention **synthetic canaries** in prod. Interview: "Before launch, I'd load test 2× peak with gradual ramp and validate p99 and error budget."
 
-### 20. What metrics and alerts would you define day one?
+</details>
+
+<details class="qa-item">
+<summary>20. What metrics and alerts would you define day one?</summary>
 
 **Four golden signals:** latency (p50/p99), traffic, errors, saturation (pool, CPU, queue lag). SLO-based alerts on burn rate. Business metrics: orders/min, payment success rate, fan-out lag. Avoid alert fatigue — page on user impact, ticket on capacity planning thresholds.
+
+</details>
 
 ---
 
@@ -2053,4 +2112,3 @@ Pick the row matching your system; offer 2 options:
 ---
 
 *End of document — senior system design interview reference.*
-
