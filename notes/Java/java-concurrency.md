@@ -1678,7 +1678,30 @@ For a rarely-incremented, frequently-read value (e.g., an active-connections gau
 <details class="qa-item">
 <summary>1. Batch job using both together — see combined skeleton with `CountDownLatch` + `Semaphore` wrapping only the DB-access portion.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+```java
+CountDownLatch done = new CountDownLatch(chunks.size());
+Semaphore dbSlots = new Semaphore(8); // cap concurrent DB connections
+
+for (Chunk chunk : chunks) {
+    executor.submit(() -> {
+        try {
+            Object parsed = parseLocally(chunk); // no permit needed
+            dbSlots.acquire();
+            try {
+                writeToDb(parsed);
+            } finally {
+                dbSlots.release();
+            }
+        } finally {
+            done.countDown();
+        }
+    });
+}
+done.await(); // wait for all chunks before aggregating
+aggregateResults();
+```
+
+`CountDownLatch` coordinates **completion**; `Semaphore` limits **concurrent DB access** — orthogonal concerns.
 
 </details>
 
@@ -1724,7 +1747,19 @@ Far less dangerous — no cross-task contamination risk since the thread is neve
 <details class="qa-item">
 <summary>1. Dedicated pool fix — wrap the parallel stream call in `dedicatedPool.submit(...)`.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+```java
+ForkJoinPool dedicatedPool = new ForkJoinPool(16);
+try {
+    dedicatedPool.submit(() ->
+        items.parallelStream()
+            .forEach(item -> processHttpCall(item)) // blocking I/O
+    ).get();
+} finally {
+    dedicatedPool.shutdown();
+}
+```
+
+Parallel streams use the **common pool** by default — blocking I/O on it starves other parallel work (including `CompletableFuture` defaults). A dedicated pool isolates I/O-bound parallel streams from CPU-bound common-pool users.
 
 </details>
 

@@ -1793,7 +1793,12 @@ Nearly every scenario traces back to a small handful of root mechanisms: the equ
 <details class="qa-item">
 <summary>1. Why does `Map<K,V>` not extend `Collection<E>`? Name the two concrete method-signature conflicts that would arise if it did.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+`Map` is a **key-value** abstraction, not a single-element collection. If it extended `Collection<E>`, two signature clashes appear:
+
+1. **`add(E e)`** — `Collection.add` adds one element; `Map` needs `put(K, V)` with two arguments.
+2. **`iterator()` / `contains(Object o)`** — `Collection` iterates/contains **values** (or elements); `Map` has distinct `keySet()`, `values()`, `entrySet()` views with different semantics.
+
+The framework uses separate interfaces to keep contracts precise.
 
 </details>
 
@@ -1807,21 +1812,40 @@ which concrete classes implement each, and why doesn't `HashMap` implement `Sequ
 <details class="qa-item">
 <summary>3. You need a `Set` with: no duplicates, sorted iteration, and O(log n) range queries. Which class, and what's the one thing you must get right about your `Comparator` to avoid silently losing entries?</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+`Map` is a **key-value** abstraction, not a single-element collection. If it extended `Collection<E>`, two signature clashes appear:
+
+1. **`add(E e)`** — `Collection.add` adds one element; `Map` needs `put(K, V)` with two arguments.
+2. **`iterator()` / `contains(Object o)`** — `Collection` iterates/contains **values** (or elements); `Map` has distinct `keySet()`, `values()`, `entrySet()` views with different semantics.
+
+The framework uses separate interfaces to keep contracts precise.
 
 </details>
 
 <details class="qa-item">
 <summary>4. What's the precise difference between "unmodifiable" and "immutable"? Give a concrete code example where treating them as equivalent causes a bug.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+- **Unmodifiable** — no mutating methods on the *view*; backing collection may still change.
+- **Immutable** — no mutation possible at all; contents never change after creation.
+
+```java
+List<String> backing = new ArrayList<>(List.of("a"));
+List<String> view = Collections.unmodifiableList(backing);
+backing.add("b"); // mutates through backing reference
+System.out.println(view.size()); // 2 — view changed!
+```
+
+`List.of()` / `List.copyOf()` are truly immutable — safe to share.
 
 </details>
 
 <details class="qa-item">
 <summary>5. Name three Java 21 additions to the Collections Framework and, for each, name the specific pre-21 gap it closes.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+1. **`SequencedCollection` / `SequencedSet` / `SequencedMap`** — uniform first/last/get/reversed operations; pre-21, `LinkedHashMap` had `firstKey` patterns but no shared API.
+2. **`addFirst` / `addLast` on `Deque`** via sequenced interfaces — consistent deque semantics across implementations.
+3. **`LinkedHashMap.sequencedKeySet()` / `sequencedValues()`** — ordered views with predictable iteration without extra wrappers.
+
+(Java 21 also formalized sequenced collections; `HashMap` does **not** implement `SequencedMap` because hash order is not meaningful sequence.)
 
 </details>
 
@@ -1844,7 +1868,17 @@ show the resulting indices after one of each call.
 <details class="qa-item">
 <summary>8. Explain exactly why `PriorityQueue.remove(Object)` is O(n) while `poll()` is O(log n), even though both conceptually "remove an element."</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+- **Unmodifiable** — no mutating methods on the *view*; backing collection may still change.
+- **Immutable** — no mutation possible at all; contents never change after creation.
+
+```java
+List<String> backing = new ArrayList<>(List.of("a"));
+List<String> view = Collections.unmodifiableList(backing);
+backing.add("b"); // mutates through backing reference
+System.out.println(view.size()); // 2 — view changed!
+```
+
+`List.of()` / `List.copyOf()` are truly immutable — safe to share.
 
 </details>
 
@@ -1858,7 +1892,7 @@ describe what pointer reassignments occur.
 <details class="qa-item">
 <summary>10. Explain why `ConcurrentHashMap.get()` requires no locking at all, but `put()` sometimes does. What specific field modifier makes the lock-free read safe?</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+`get()` reads the volatile `Node[] table` reference and walks bin lists — reads see published nodes via **volatile**/`final` field semantics without locking the whole map. `put()` may CAS into an empty bin or **lock a single bin** (`synchronized` on the bin head) for insertion/update/resizing. The `volatile` (or equivalent safe publication) on table and node fields ensures readers never see torn/partial structure.
 
 </details>
 
@@ -1945,35 +1979,35 @@ while (it.hasNext()) {
 <details class="qa-item">
 <summary>18. A service holds a 50-million-entry lookup table, built once at startup from a bulk load, then read millions of times per minute with no further writes.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**`HashMap`** (or pre-sized `HashMap` with known capacity to avoid resizes during load). O(1) expected reads, minimal memory overhead vs tree structures. Reject **`ConcurrentHashMap`** — unnecessary concurrency overhead if truly read-only after publish (use immutable snapshot or `Map.copyOf` if sharing). Reject **`TreeMap`** — O(log n) reads and higher per-entry cost. Consider off-heap or compressed storage only if heap is prohibitive.
 
 </details>
 
 <details class="qa-item">
 <summary>19. A leaderboard needs the current top 10 scores at all times, updated by thousands of score submissions per second from a single-threaded event-processing pipeline.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**`PriorityQueue`** (min-heap of size 10 for top-10 highest if using reverse comparator, or maintain size-10 heap). Single-threaded → no concurrency wrapper needed. O(log 10) per update. Reject **`TreeSet`** — also works but higher constant factor; reject **`ConcurrentSkipListMap`** — no concurrency needed. Alternative: bucket by score + `TreeMap` if score range is small.
 
 </details>
 
 <details class="qa-item">
 <summary>20. A rarely-changing list of ~15 feature-flag listeners is iterated on every single request across a highly concurrent service.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**`CopyOnWriteArrayList`** — reads (iteration) are lock-free on a snapshot; writes (rare listener registration) copy the array. Perfect read-heavy, write-rare. Reject plain `ArrayList` + lock — iterator would need synchronization every request. Reject `Collections.synchronizedList` — every iteration locks.
 
 </details>
 
 <details class="qa-item">
 <summary>21. A batch job needs to deduplicate 200 million log lines by a derived key, single-threaded, memory being the primary constraint.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+If exact dedup fits RAM: **`HashSet`** of keys (or `LongOpenHashSet` / primitive set if keys are numeric). If not: **sort + scan** external disk (no in-memory set), or **Bloom filter** for probabilistic dedup with second-pass confirmation. Reject `TreeSet` — higher memory per entry. Tune initial capacity/load factor to avoid resize churn during bulk insert.
 
 </details>
 
 <details class="qa-item">
 <summary>22. A cache of parsed configuration objects needs to survive being read by 50,000 concurrent virtual threads, refreshed roughly once per minute.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**`volatile` reference swap** to immutable `Map.copyOf(snapshot)` refreshed atomically each minute — readers see stable snapshot without locking. Or **`ConcurrentHashMap`** if per-key lazy loading. For single bulk refresh: build new map, then `configCache = newMap` (volatile field). Reject `Collections.synchronizedMap` — pins under massive read concurrency. Caffeine with `refreshAfterWrite` is the production-grade choice.
 
 </details>
 
@@ -1995,14 +2029,15 @@ counts.put(key, counts.get(key) + 1);
 <details class="qa-item">
 <summary>24. Under what specific circumstance does calling a mutating method on a `ConcurrentHashMap` from inside a `computeIfAbsent` lambda (on the *same* map) cause a problem? What's the fix?</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**`PriorityQueue`** (min-heap of size 10 for top-10 highest if using reverse comparator, or maintain size-10 heap). Single-threaded → no concurrency wrapper needed. O(log 10) per update. Reject **`TreeSet`** — also works but higher constant factor; reject **`ConcurrentSkipListMap`** — no concurrency needed. Alternative: bucket by score + `TreeMap` if score range is small.
 
 </details>
 
 <details class="qa-item">
 <summary>25. You're migrating a thread-per-request service from a fixed platform-thread pool (200 threads) to virtual threads. Name two categories of latent bugs in existing shared-collection code that are more likely to surface after this migration, and why.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+1. **Non-thread-safe collections under hidden concurrency** — `HashMap`/`ArrayList` shared across requests were "safe" at 200 platform threads with low collision; 50k virtual threads expose check-then-act races and `ConcurrentModificationException`.
+2. **`synchronized` on shared structures** — more concurrent access causes lock contention and long pin times; virtual threads magnify scheduler queue depth when blocking on fat locks.
 
 </details>
 
@@ -2025,35 +2060,36 @@ not "because it's well-tested," but because of what specific mechanism?
 <details class="qa-item">
 <summary>28. A `Set<CustomKey>` used for request deduplication starts admitting duplicate requests only after several days of uptime, never in fresh restarts or in tests.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+1. **Non-thread-safe collections under hidden concurrency** — `HashMap`/`ArrayList` shared across requests were "safe" at 200 platform threads with low collision; 50k virtual threads expose check-then-act races and `ConcurrentModificationException`.
+2. **`synchronized` on shared structures** — more concurrent access causes lock contention and long pin times; virtual threads magnify scheduler queue depth when blocking on fat locks.
 
 </details>
 
 <details class="qa-item">
 <summary>29. A service's heap usage climbs steadily and never drops, even after a full GC, and a heap histogram shows one `HashMap`'s internal table array is far larger than its live entry count would suggest.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**HashMap resize without shrink** — table was huge during a spike, entries removed but capacity never shrinks (HashMap doesn't compact). Or **retained keys** (e.g. `Integer` cache, interned strings) holding references. **Confirm:** compare `map.size()` vs table length via heap dump or JOL. **Fix:** rebuild into new `HashMap` with right initial capacity, or use cache with eviction (Caffeine).
 
 </details>
 
 <details class="qa-item">
 <summary>30. Threads occasionally block for hundreds of milliseconds on what a thread dump shows as a `synchronized` block wrapping a shared `HashMap`, under moderate concurrent load that wasn't a problem in staging.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**Coarse lock on non-concurrent `HashMap`** — all readers and writers serialize on one monitor. Staging had lower concurrency. **Fix:** `ConcurrentHashMap`, or read-write lock if reads dominate, or partition into shard maps. Never wrap plain `HashMap` in `synchronized` for high-traffic paths.
 
 </details>
 
 <details class="qa-item">
 <summary>31. A `PriorityQueue`-backed task scheduler occasionally processes a lower-priority task before a higher-priority one that was added earlier in the same batch, despite `poll()` being used correctly every time it's called.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+`PriorityQueue` is **not stable** — equal-priority (or comparator-equal) elements have no FIFO guarantee. If comparator treats distinct tasks as equal (e.g. only compares priority enum, not sequence), heap order is arbitrary. **Fix:** comparator includes sequence/timestamp, or use `LinkedHashMap` + separate structure, or `PriorityQueue` with unique sequence in comparison.
 
 </details>
 
 <details class="qa-item">
 <summary>32. A `WeakHashMap`-based "cache" has a near-zero hit rate in production despite the same keys being requested repeatedly within a short window.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**Keys are strongly reachable elsewhere** — `WeakHashMap` entries survive only if keys are weakly reachable. If you store the same `String` in a strong `Set` or static cache, weak entries never clear but also **new keys** are different instances (not interned) → misses. Or **GC clears entries too aggressively** between requests if nothing else strongly references keys. **Fix:** use `String.intern()` / canonical key pool, or switch to Caffeine with TTL/size bounds.
 
 </details>
 
@@ -2062,21 +2098,21 @@ _Work through this on your own first — detailed answer not included in the sou
 <details class="qa-item">
 <summary>33. A rate limiter tracking request counts per API key over a sliding 60-second window, serving ~50,000 requests/sec across many concurrent virtual threads.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**Per-key `ConcurrentHashMap` + lock-free or striped counters** — e.g. `ConcurrentHashMap<String, LongAdder>` with window reset, or bucketed time slices. For sliding window at scale: **Redis/Central store** or approximate counting (Count-Min Sketch). In-memory: avoid one global lock; shard by key hash. Caffeine with `expireAfterWrite(60s)` for per-key windows if approximate limits suffice.
 
 </details>
 
 <details class="qa-item">
 <summary>34. An in-memory audit log that must expose read-only access to the last 10,000 entries in insertion order, safely to many concurrent readers, while a single writer appends continuously.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**Circular buffer** of 10k slots + **volatile/COW snapshot** for readers, or `ArrayDeque` with copy-on-write snapshot on read path. Production pattern: single writer thread appends to queue; readers get `List.copyOf` snapshot or immutable ring buffer view. `CopyOnWriteArrayList` works if 10k copies are acceptable on each write (usually not) — prefer ring buffer + atomic reference to immutable list snapshot periodically.
 
 </details>
 
 <details class="qa-item">
 <summary>35. A graph algorithm needing to repeatedly extract the minimum-distance unvisited node (Dijkstra's-style) from a set of ~1 million nodes, with occasional priority updates for nodes already in the structure.</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**`PriorityQueue` + `HashMap` for node→heap entry** (or **indexed heap**). Standard `PriorityQueue` lacks O(log n) arbitrary priority update — use lazy deletion (re-insert with new priority) or custom indexed heap. For concurrent: not typical in Dijkstra inner loop. **`TreeSet`** with explicit comparator on (distance, nodeId) works but higher constant factors than binary heap.
 
 </details>
 
@@ -2085,28 +2121,35 @@ _Work through this on your own first — detailed answer not included in the sou
 <details class="qa-item">
 <summary>36. "Walk me through what happens, step by step, when you call `put()` on a `HashMap` that's about to trigger a resize."</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+1. Compute `hash`, find bin index `(n-1) & hash`.
+2. Walk bin chain / tree.
+3. If threshold exceeded (`size > capacity * loadFactor`), **resize** 2x.
+4. Allocate new table; **split each old bin** using high bit of hash (lo/hi chains) without rehashing every key from scratch.
+5. Insert new entry in appropriate bin (tree if bin length > 8).
+6. Increment `size`.
+
+Resize is O(n) but amortized O(1) per put.
 
 </details>
 
 <details class="qa-item">
 <summary>37. "Why would you ever choose `ConcurrentSkipListMap` over `ConcurrentHashMap`? What are you giving up, and what are you gaining?"</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+Choose **`ConcurrentSkipListMap`** when you need **sorted keys**, `subMap`/`headMap`/`tailMap`, or concurrent navigable operations. You gain sorted iteration and range queries. You give up **lower memory overhead and faster point lookups** — skip list has higher constant factors than CHM hash bins. Never choose it for plain key-value get/put without ordering need.
 
 </details>
 
 <details class="qa-item">
 <summary>38. "A colleague says `ArrayList.add()` is O(1). Do you agree? Push back on the parts of that claim you'd want to refine."</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+**Amortized O(1)** for append at end — occasional O(n) resize when capacity exhausted. **O(n)** if add at index `i` (shift elements). Worst-case single add is O(n) due to resize copying entire backing array. Also: `add` triggers `ensureCapacity` — if you know size upfront, presize to avoid repeated resizes.
 
 </details>
 
 <details class="qa-item">
 <summary>39. "Explain the `equals()`/`hashCode()` contract to me as if I'd never seen it, then show me what breaks if you violate the load-bearing direction of it."</summary>
 
-_Work through this on your own first — detailed answer not included in the source note._
+Equal objects must have equal hash codes. Hash-based collections place objects in buckets by `hashCode`; lookup uses `equals` within bucket. **Violating `equals` → `hashCode`:** object in wrong bucket → `get` returns null even though `equals` would match. Example: mutable key changes hash after insert → lost entry. **Fix:** immutable keys, or constant `hashCode` from stable fields.
 
 </details>
 
