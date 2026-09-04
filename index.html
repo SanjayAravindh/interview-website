@@ -15,25 +15,34 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/github.min.css"
     />
-    <link rel="stylesheet" href="styles.css?v=20260904c" />
+    <link rel="stylesheet" href="styles.css?v=20260904f" />
   </head>
   <body>
     <div class="app">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
+          <p class="brand-kicker">Interview prep</p>
           <p class="brand">Interview Notes</p>
+          <p class="note-count" id="note-count" hidden></p>
           <form class="site-search" role="search" id="site-search">
             <label class="visually-hidden" for="search-input">Search notes</label>
-            <input
-              type="search"
-              id="search-input"
-              placeholder="Search notes…"
-              autocomplete="off"
-              spellcheck="false"
-              aria-autocomplete="list"
-              aria-controls="search-results"
-              aria-expanded="false"
-            />
+            <div class="search-shell">
+              <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8" />
+                <path d="M16 16.5 20 20.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              <input
+                type="search"
+                id="search-input"
+                placeholder="Search notes…"
+                autocomplete="off"
+                spellcheck="false"
+                aria-autocomplete="list"
+                aria-controls="search-results"
+                aria-expanded="false"
+              />
+              <kbd class="search-hotkey">/</kbd>
+            </div>
             <div
               class="search-results"
               id="search-results"
@@ -47,15 +56,26 @@
         </nav>
       </aside>
 
-      <main class="content">
-        <article class="article" id="article">
-          <p class="placeholder">Loading notes…</p>
-        </article>
-      </main>
+      <section class="workspace">
+        <header class="reader-bar" id="reader-bar">
+          <div class="reader-identity">
+            <span class="reader-group" id="reader-group"></span>
+            <span class="reader-title" id="reader-title">Choose a topic</span>
+          </div>
+          <div class="reader-progress" aria-hidden="true">
+            <span class="reader-progress-fill" id="reader-progress"></span>
+          </div>
+        </header>
+        <main class="content" id="content">
+          <article class="article" id="article">
+            <p class="placeholder">Loading notes…</p>
+          </article>
+        </main>
+      </section>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
-    <script src="app.js?v=20260904c"></script>
+    <script src="app.js?v=20260904f"></script>
   </body>
 </html>

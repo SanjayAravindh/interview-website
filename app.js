@@ -1,9 +1,14 @@
 (() => {
   const topicList = document.getElementById("topic-list");
   const article = document.getElementById("article");
+  const content = document.getElementById("content");
   const searchForm = document.getElementById("site-search");
   const searchInput = document.getElementById("search-input");
   const searchResults = document.getElementById("search-results");
+  const noteCount = document.getElementById("note-count");
+  const readerGroup = document.getElementById("reader-group");
+  const readerTitle = document.getElementById("reader-title");
+  const readerProgress = document.getElementById("reader-progress");
 
   let notes = [];
   let currentNote = null;
@@ -11,6 +16,7 @@
   let searchReady = false;
   let searchTimer = 0;
   let activeResult = -1;
+  let tocSpyLinks = [];
   const slugState = { used: new Set() };
 
   marked.setOptions({
@@ -50,7 +56,67 @@
   }
 
   function setPlaceholder(message, isError = false) {
+    article.classList.remove("is-ready");
+    if (!isError && message === "Loading…") {
+      article.innerHTML = `
+        <div class="article-skeleton" aria-busy="true">
+          <span class="sk sk-title"></span>
+          <span class="sk sk-line"></span>
+          <span class="sk sk-line"></span>
+          <span class="sk sk-line short"></span>
+          <span class="sk sk-line"></span>
+          <span class="visually-hidden">Loading note</span>
+        </div>`;
+      return;
+    }
     article.innerHTML = `<p class="${isError ? "error" : "placeholder"}">${message}</p>`;
+  }
+
+  function updateReaderChrome(note) {
+    if (!note) {
+      readerGroup.textContent = "";
+      readerTitle.textContent = "Choose a topic";
+      readerProgress.style.width = "0%";
+      return;
+    }
+    const folder = note.description || "Notes";
+    const folderNotes = notes.filter((item) => (item.description || "Notes") === folder);
+    readerGroup.textContent = groupDisplayLabel(folder, folderNotes.length ? folderNotes : [note]);
+    readerTitle.textContent = sidebarTitle(note.title);
+  }
+
+  function updateReadingProgress() {
+    const max = content.scrollHeight - content.clientHeight;
+    const pct = max <= 0 ? 0 : Math.min(100, (content.scrollTop / max) * 100);
+    readerProgress.style.width = `${pct}%`;
+    updateHeadingSpy();
+  }
+
+  function updateHeadingSpy() {
+    if (!tocSpyLinks.length) return;
+    const probe = content.getBoundingClientRect().top + 72;
+    let current = tocSpyLinks[0];
+    for (const link of tocSpyLinks) {
+      const id = decodeURIComponent(link.getAttribute("href").slice(1));
+      const heading = document.getElementById(id);
+      if (!heading) continue;
+      if (heading.getBoundingClientRect().top <= probe) current = link;
+    }
+    tocSpyLinks.forEach((link) => link.classList.toggle("toc-current", link === current));
+  }
+
+  function bindHeadingSpy() {
+    tocSpyLinks = [];
+    const tocHeading = article.querySelector("#table-of-contents");
+    if (!tocHeading) return;
+    let list = tocHeading.nextElementSibling;
+    while (list && list.tagName !== "OL" && list.tagName !== "UL") {
+      list = list.nextElementSibling;
+    }
+    if (!list) return;
+    tocSpyLinks = [...list.querySelectorAll('a[href^="#"]')];
+    tocSpyLinks.forEach((link) => link.classList.add("toc-link"));
+    updateHeadingSpy();
   }
 
   function hashId() {
@@ -157,7 +223,10 @@
     for (const folder of folderKeys) {
       const folderNotes = groups.get(folder);
       html.push(`<li class="topic-group">
-        <p class="topic-group-label">${escapeHtml(groupDisplayLabel(folder, folderNotes))}</p>
+        <p class="topic-group-label">
+          <span>${escapeHtml(groupDisplayLabel(folder, folderNotes))}</span>
+          <span class="topic-group-count">${folderNotes.length}</span>
+        </p>
         <ul class="topic-group-list">
           ${folderNotes.map((note) => noteLink(note, activeId)).join("")}
         </ul>
@@ -298,12 +367,18 @@
     if (!id) return false;
     const el = document.getElementById(id);
     if (!el) return false;
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    const top =
+      el.getBoundingClientRect().top -
+      content.getBoundingClientRect().top +
+      content.scrollTop -
+      16;
+    content.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
     return true;
   }
 
   async function loadNote(note, headingId) {
     if (!note) {
+      updateReaderChrome(null);
       setPlaceholder("No notes found. Drop a .md file into the notes/ folder, then refresh.");
       renderNav(null);
       return;
@@ -311,7 +386,9 @@
 
     currentNote = note;
     renderNav(note.id);
+    updateReaderChrome(note);
     setPlaceholder("Loading…");
+    content.scrollTo({ top: 0 });
 
     try {
       const response = await fetch(encodeURI(note.file), { cache: "no-store" });
@@ -320,13 +397,16 @@
       }
       const markdown = await response.text();
       article.innerHTML = renderMarkdownWithQA(markdown);
+      article.classList.add("is-ready");
       highlightCode(article);
       highlightArticleQuery(currentSearchQuery());
+      bindHeadingSpy();
       if (headingId) {
         scrollToHeading(headingId);
       } else {
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        content.scrollTo({ top: 0, behavior: "smooth" });
       }
+      updateReadingProgress();
     } catch (error) {
       setPlaceholder(error.message || "Failed to load note.", true);
     }
@@ -353,8 +433,9 @@
     }
 
     if (note && currentNote && currentNote.id === note.id) {
+      updateReaderChrome(note);
       if (heading) scrollToHeading(heading);
-      else window.scrollTo({ top: 0, behavior: "smooth" });
+      else content.scrollTo({ top: 0, behavior: "smooth" });
       renderNav(note.id);
       return;
     }
@@ -540,7 +621,7 @@
         (hit, index) => `
       <button type="button" class="search-result" role="option" data-index="${index}"
         data-note="${escapeHtml(hit.noteId)}" data-heading="${escapeHtml(hit.headingId)}"
-        aria-selected="${index === activeResult}">
+        style="--i:${index}" aria-selected="${index === activeResult}">
         <span class="search-result-note">${escapeHtml(hit.group)} · ${escapeHtml(sidebarTitle(hit.title))}</span>
         <span class="search-result-heading">${escapeHtml(hit.heading)}</span>
         <span class="search-result-snippet">${hit.snippet}</span>
@@ -718,6 +799,10 @@
       const data = await loadNotesIndex();
       notes = Array.isArray(data.notes) ? data.notes.sort(compareCurriculum) : [];
       loadSearchIndex();
+      if (notes.length) {
+        noteCount.hidden = false;
+        noteCount.textContent = `${notes.length} topics`;
+      }
       if (!notes.length) {
         setPlaceholder("No markdown files yet. Add .md files under notes/ (subfolders are fine), then refresh.");
         renderNav(null);
@@ -733,6 +818,8 @@
       );
     }
   }
+
+  content.addEventListener("scroll", updateReadingProgress, { passive: true });
 
   init();
 })();
