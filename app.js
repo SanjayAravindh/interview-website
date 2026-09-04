@@ -1,11 +1,16 @@
 (() => {
   const topicList = document.getElementById("topic-list");
   const article = document.getElementById("article");
-  const sidebar = document.getElementById("sidebar");
-  const sidebarToggle = document.getElementById("sidebar-toggle");
+  const searchForm = document.getElementById("site-search");
+  const searchInput = document.getElementById("search-input");
+  const searchResults = document.getElementById("search-results");
 
   let notes = [];
   let currentNote = null;
+  let searchDocs = [];
+  let searchReady = false;
+  let searchTimer = 0;
+  let activeResult = -1;
   const slugState = { used: new Set() };
 
   marked.setOptions({
@@ -68,11 +73,18 @@
     return findNoteById(fromHash) ? fromHash : null;
   }
 
-  function noteUrl(noteId, headingId) {
+  function noteUrl(noteId, headingId, query) {
     const url = new URL(location.href);
     url.searchParams.set("note", noteId);
+    const q = query === undefined ? new URLSearchParams(location.search).get("q") : query;
+    if (q) url.searchParams.set("q", q);
+    else url.searchParams.delete("q");
     url.hash = headingId ? headingId : "";
     return url;
+  }
+
+  function currentSearchQuery() {
+    return (new URLSearchParams(location.search).get("q") || "").trim();
   }
 
   function compareCurriculum(a, b) {
@@ -309,6 +321,7 @@
       const markdown = await response.text();
       article.innerHTML = renderMarkdownWithQA(markdown);
       highlightCode(article);
+      highlightArticleQuery(currentSearchQuery());
       if (headingId) {
         scrollToHeading(headingId);
       } else {
@@ -349,11 +362,6 @@
     await loadNote(note, heading);
   }
 
-  sidebarToggle.addEventListener("click", () => {
-    const open = sidebar.classList.toggle("open");
-    sidebarToggle.setAttribute("aria-expanded", String(open));
-  });
-
   topicList.addEventListener("click", (event) => {
     const link = event.target.closest("a[data-id]");
     if (!link) return;
@@ -363,10 +371,6 @@
     const url = noteUrl(note.id);
     history.pushState({ note: note.id }, "", url);
     loadNote(note);
-    if (window.matchMedia("(max-width: 860px)").matches) {
-      sidebar.classList.remove("open");
-      sidebarToggle.setAttribute("aria-expanded", "false");
-    }
   });
 
   article.addEventListener("click", (event) => {
@@ -407,6 +411,290 @@
     syncFromLocation({ replace: true });
   });
 
+  function tokenizeQuery(raw) {
+    return String(raw)
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}_+-]+/u)
+      .map((t) => t.trim())
+      .filter((t) => t.length >= 2);
+  }
+
+  function snippetAround(text, tokens) {
+    const lower = text.toLowerCase();
+    let idx = -1;
+    let matched = tokens[0] || "";
+    for (const token of tokens) {
+      const at = lower.indexOf(token);
+      if (at !== -1) {
+        idx = at;
+        matched = token;
+        break;
+      }
+    }
+    if (idx === -1) {
+      return escapeHtml(text.slice(0, 160)) + (text.length > 160 ? "…" : "");
+    }
+    const start = Math.max(0, idx - 48);
+    const end = Math.min(text.length, idx + matched.length + 90);
+    const slice = `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
+    return highlightPlain(slice, tokens);
+  }
+
+  function highlightPlain(text, tokens) {
+    const escaped = escapeHtml(text);
+    if (!tokens.length) return escaped;
+    const pattern = tokens
+      .slice()
+      .sort((a, b) => b.length - a.length)
+      .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|");
+    return escaped.replace(new RegExp(`(${pattern})`, "gi"), "<mark>$1</mark>");
+  }
+
+  function searchNotes(raw) {
+    const tokens = tokenizeQuery(raw);
+    if (!tokens.length || !searchDocs.length) return [];
+
+    const hits = [];
+    for (const doc of searchDocs) {
+      const titleLower = doc.title.toLowerCase();
+      const titleScore = tokens.every((t) => titleLower.includes(t)) ? 50 : 0;
+      if (titleScore) {
+        hits.push({
+          noteId: doc.id,
+          title: doc.title,
+          group: doc.group,
+          heading: doc.title,
+          headingId: "",
+          snippet: highlightPlain(doc.title, tokens),
+          score: titleScore + (titleLower.startsWith(tokens[0]) ? 10 : 0),
+        });
+      }
+
+      for (const section of doc.sections || []) {
+        const headingLower = (section.heading || "").toLowerCase();
+        const bodyLower = (section.text || "").toLowerCase();
+        const headingHit = tokens.every((t) => headingLower.includes(t));
+        const bodyHit = tokens.every((t) => bodyLower.includes(t));
+        const mixedHit =
+          !headingHit &&
+          !bodyHit &&
+          tokens.every((t) => headingLower.includes(t) || bodyLower.includes(t));
+        if (!headingHit && !bodyHit && !mixedHit) continue;
+
+        const score =
+          (headingHit ? 30 : 0) +
+          (bodyHit ? 12 : 0) +
+          (mixedHit ? 6 : 0) +
+          (titleScore ? 4 : 0);
+        hits.push({
+          noteId: doc.id,
+          title: doc.title,
+          group: doc.group,
+          heading: section.heading || doc.title,
+          headingId: section.headingId || "",
+          snippet: headingHit
+            ? highlightPlain(section.heading, tokens)
+            : snippetAround(section.text || section.heading, tokens),
+          score,
+        });
+      }
+    }
+
+    hits.sort((a, b) => b.score - a.score || a.title.localeCompare(b.title));
+    const seen = new Set();
+    const unique = [];
+    for (const hit of hits) {
+      const key = `${hit.noteId}#${hit.headingId}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      unique.push(hit);
+      if (unique.length >= 24) break;
+    }
+    return unique;
+  }
+
+  function renderSearchResults(query, hits) {
+    if (!query.trim()) {
+      searchResults.hidden = true;
+      searchResults.innerHTML = "";
+      searchInput.setAttribute("aria-expanded", "false");
+      activeResult = -1;
+      return;
+    }
+
+    searchResults.hidden = false;
+    searchInput.setAttribute("aria-expanded", "true");
+    if (!searchReady) {
+      searchResults.innerHTML = `<p class="search-status">Loading search index…</p>`;
+      return;
+    }
+    if (!hits.length) {
+      searchResults.innerHTML = `<p class="search-empty">No matches for “${escapeHtml(query.trim())}”.</p>`;
+      activeResult = -1;
+      return;
+    }
+
+    searchResults.innerHTML = hits
+      .map(
+        (hit, index) => `
+      <button type="button" class="search-result" role="option" data-index="${index}"
+        data-note="${escapeHtml(hit.noteId)}" data-heading="${escapeHtml(hit.headingId)}"
+        aria-selected="${index === activeResult}">
+        <span class="search-result-note">${escapeHtml(hit.group)} · ${escapeHtml(sidebarTitle(hit.title))}</span>
+        <span class="search-result-heading">${escapeHtml(hit.heading)}</span>
+        <span class="search-result-snippet">${hit.snippet}</span>
+      </button>`
+      )
+      .join("");
+  }
+
+  function setActiveResult(index) {
+    const buttons = [...searchResults.querySelectorAll(".search-result")];
+    if (!buttons.length) return;
+    activeResult = (index + buttons.length) % buttons.length;
+    buttons.forEach((btn, i) => btn.setAttribute("aria-selected", String(i === activeResult)));
+    buttons[activeResult].scrollIntoView({ block: "nearest" });
+  }
+
+  async function openSearchHit(noteId, headingId, query) {
+    const note = findNoteById(noteId);
+    if (!note) return;
+    const url = noteUrl(note.id, headingId, query);
+    history.pushState({ note: note.id }, "", url);
+    searchResults.hidden = true;
+    searchInput.setAttribute("aria-expanded", "false");
+    await loadNote(note, headingId);
+  }
+
+  function highlightArticleQuery(raw) {
+    const tokens = tokenizeQuery(raw);
+    article.querySelectorAll("mark.search-hit").forEach((mark) => {
+      mark.replaceWith(document.createTextNode(mark.textContent));
+    });
+    if (!tokens.length) return;
+
+    const pattern = new RegExp(
+      `(${tokens
+        .slice()
+        .sort((a, b) => b.length - a.length)
+        .map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+        .join("|")})`,
+      "gi"
+    );
+    const skip = new Set(["SCRIPT", "STYLE", "CODE"]);
+    const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (walker.nextNode()) {
+      const parent = walker.currentNode.parentElement;
+      if (!parent || skip.has(parent.tagName)) continue;
+      if (!pattern.test(walker.currentNode.nodeValue)) {
+        pattern.lastIndex = 0;
+        continue;
+      }
+      pattern.lastIndex = 0;
+      nodes.push(walker.currentNode);
+    }
+    for (const node of nodes) {
+      const text = node.nodeValue;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      text.replace(pattern, (match, _g, offset) => {
+        if (offset > last) frag.append(text.slice(last, offset));
+        const mark = document.createElement("mark");
+        mark.className = "search-hit";
+        mark.textContent = match;
+        frag.append(mark);
+        last = offset + match.length;
+        return match;
+      });
+      if (last < text.length) frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  }
+
+  async function loadSearchIndex() {
+    const sources = ["api/search-index", "search-index.json"];
+    for (const url of sources) {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) continue;
+        const data = await response.json();
+        searchDocs = Array.isArray(data.documents) ? data.documents : [];
+        searchReady = true;
+        if (searchInput.value.trim()) {
+          renderSearchResults(searchInput.value, searchNotes(searchInput.value));
+        }
+        return;
+      } catch {
+        /* try next source */
+      }
+    }
+    searchReady = true;
+    searchDocs = [];
+  }
+
+  searchForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const buttons = searchResults.querySelectorAll(".search-result");
+    const chosen = buttons[activeResult] || buttons[0];
+    if (!chosen) return;
+    openSearchHit(chosen.dataset.note, chosen.dataset.heading, searchInput.value.trim());
+  });
+
+  searchInput.addEventListener("input", () => {
+    window.clearTimeout(searchTimer);
+    searchTimer = window.setTimeout(() => {
+      activeResult = -1;
+      renderSearchResults(searchInput.value, searchNotes(searchInput.value));
+    }, 120);
+  });
+
+  searchInput.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveResult(activeResult + 1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveResult(activeResult - 1);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      const buttons = searchResults.querySelectorAll(".search-result");
+      const chosen = buttons[activeResult] || buttons[0];
+      if (chosen) {
+        openSearchHit(chosen.dataset.note, chosen.dataset.heading, searchInput.value.trim());
+      }
+    } else if (event.key === "Escape") {
+      searchResults.hidden = true;
+      searchInput.setAttribute("aria-expanded", "false");
+      searchInput.blur();
+    }
+  });
+
+  searchResults.addEventListener("mousedown", (event) => {
+    const button = event.target.closest(".search-result");
+    if (!button) return;
+    event.preventDefault();
+    openSearchHit(button.dataset.note, button.dataset.heading, searchInput.value.trim());
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "/" && event.target !== searchInput && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      const tag = event.target.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      event.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    }
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!searchForm.contains(event.target)) {
+      searchResults.hidden = true;
+      searchInput.setAttribute("aria-expanded", "false");
+    }
+  });
+
   async function loadNotesIndex() {
     const sources = ["api/notes", "notes.json"];
     let lastError = "Could not load notes";
@@ -429,11 +717,14 @@
     try {
       const data = await loadNotesIndex();
       notes = Array.isArray(data.notes) ? data.notes.sort(compareCurriculum) : [];
+      loadSearchIndex();
       if (!notes.length) {
         setPlaceholder("No markdown files yet. Add .md files under notes/ (subfolders are fine), then refresh.");
         renderNav(null);
         return;
       }
+      const existingQ = currentSearchQuery();
+      if (existingQ) searchInput.value = existingQ;
       await syncFromLocation({ replace: true });
     } catch (error) {
       setPlaceholder(

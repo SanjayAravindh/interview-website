@@ -55,6 +55,15 @@ const server = http.createServer((req, res) => {
     }
   }
 
+  if (req.method === "GET" && url.pathname === "/api/search-index") {
+    try {
+      const { buildSearchIndex } = require("./lib/search-index");
+      return sendJson(res, 200, buildSearchIndex());
+    } catch (error) {
+      return sendJson(res, 500, { error: error.message || "Failed to build search index" });
+    }
+  }
+
   if (req.method !== "GET" && req.method !== "HEAD") {
     return sendText(res, 405, "Method Not Allowed");
   }
