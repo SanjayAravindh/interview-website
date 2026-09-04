@@ -18,7 +18,12 @@
 11. [Concept 11: `java.util.concurrent` — CAS, `AtomicInteger`, and `ReentrantLock`](#concept-11-javautilconcurrent-cas-atomicinteger-and-reentrantlock)
 12. [Concept 12: `final` Fields and Safe Publication](#concept-12-final-fields-and-safe-publication)
 13. [Concept 13: `wait()`, `notify()`, `notifyAll()` — Coordinating Threads on a Monitor](#concept-13-wait-notify-notifyall-coordinating-threads-on-a-monitor)
-14. [Roadmap Status: JVM & JMM Track Complete](#roadmap-status-jvm-jmm-track-complete)
+14. [Concept 14: Class File Format and Bytecode](#concept-14-class-file-format-and-bytecode)
+15. [Concept 15: JIT Deep Dive — Inlining, OSR, Deoptimization, Escape Analysis](#concept-15-jit-deep-dive-inlining-osr-deoptimization-escape-analysis)
+16. [Concept 16: Off-Heap, Direct Memory, and Metaspace](#concept-16-off-heap-direct-memory-and-metaspace)
+17. [Concept 17: GC Logging, Tuning Flags, and Containers](#concept-17-gc-logging-tuning-flags-and-containers)
+18. [Concept 18: JFR, async-profiler, and `jcmd`](#concept-18-jfr-async-profiler-and-jcmd)
+19. [Roadmap Status: JVM & JMM Track Complete](#roadmap-status-jvm-jmm-track-complete)
 
 ---
 
@@ -1177,9 +1182,228 @@ class BoundedQueue {
 
 ---
 
+## Concept 14: Class File Format and Bytecode
+
+### 1. The problem it solves
+
+Concept 1 said `javac` emits bytecode. Seniors get asked *what is actually in a `.class` file* — enough to read `javap`, explain verification, and know why a "same source" jar behaves differently after a compiler upgrade.
+
+### 2. The concept, completely
+
+A `.class` file is a **binary contract** between compiler and JVM:
+
+```
+magic (0xCAFEBABE)
+version (major/minor — JVM rejects unsupported versions)
+constant_pool[]     // interned strings, class/name/type refs, method refs
+access_flags        // public, final, interface, enum, module, ...
+this_class, super_class, interfaces[]
+fields[], methods[] // each method has Code attribute: max_stack, max_locals, bytecode
+attributes[]        // SourceFile, InnerClasses, BootstrapMethods, NestHost, Record, ...
+```
+
+Bytecode is a **stack machine**. Typical sequence:
+
+```
+aload_0          // push this
+getfield #12     // pop this, push field
+iconst_1
+iadd
+putfield #12
+```
+
+`invokedynamic` (Java 7+, used by lambdas) does **not** bake a call site to a concrete class. It stores a **bootstrap method** in the constant pool; first invocation links a `CallSite`. That is why lambdas are not anonymous inner classes.
+
+### 3. How it works internally
+
+1. Class loader reads bytes; magic/version checked.
+2. **Verification** (linking): stack map frames prove types never underflow; you cannot jump into the middle of an instruction. This is why random byte patches usually `VerifyError`.
+3. `javap -c -p -v Foo` shows pool, flags, and bytecode — first tool for "why is this lambda a static method in the nest?"
+4. **Nestmates** (Java 11) let nested classes access private members without synthetic bridge methods the way older compilers emitted.
+
+### 4. Production / interview angles
+
+- `UnsupportedClassVersionError` = bytecode major newer than the running JVM (17 class on a Java 11 runtime).
+- Preview features set minor version bits — production images must not ship `--enable-preview` leftovers.
+- Agents/`byte-buddy` rewrite `Code` attributes; a bad rewrite fails verification, not "silently wrong math."
+
+**Mental model:** source is for humans; the `.class` file is what the JVM *is*. If you cannot read `javap`, you cannot debug linkage, lambdas, or "it works in IDE, fails in Docker."
+
+---
+
+## Concept 15: JIT Deep Dive — Inlining, OSR, Deoptimization, Escape Analysis
+
+### 1. The problem it solves
+
+Concept 4 introduced interpreter + C1/C2. Production questions are: *why is the first minute slow, why did a "simple" change tank p99, why `-XX:+PrintCompilation` shows DEOPT?*
+
+### 2. The concept, completely
+
+HotSpot **profiles** interpreted (and C1) execution: branch frequencies, receiver types, nullness. When a method is hot:
+
+| Compiler | Role | Typical trigger |
+|---|---|---|
+| **C1** (client) | Fast, lightly optimized native code | After ~hundreds–thousands of invocations |
+| **C2** (server) | Heavy optimization using profiles | After more invocations / back-edges |
+| **Graal** (optional) | Alternative JIT | JVMCI |
+
+**Inlining** is the most important optimization. A tiny getter inlined into a loop becomes a field load — no call, no debug info in the hot path. Too-large methods (`-XX:MaxInlineSize`, default ~35 bytes of bytecode) do not inline; "one giant method" is a real performance smell.
+
+**OSR (On-Stack Replacement):** a long-running loop can be compiled **while it is still executing** and jump from interpreted frame into compiled code mid-loop. Explains "warmup in a single request."
+
+**Deoptimization:** compiled code embeds *speculative* assumptions ("this call site is monomorphic — always `ArrayList`"). If a `LinkedList` appears, the JVM **invalidates** the nmethod and falls back. Correctness first; a megamorphic call site stays slow.
+
+**Escape analysis:** if an object never escapes the compiled method/thread, the JIT may **scalar-replace** it (allocate fields in registers) or skip locking on a thread-local object. `new Point(x,y)` in a hot loop can be allocation-free *if* it does not escape.
+
+### 3. How it works internally
+
+```
+invoke → interpreter counters
+      → C1 compile + more profiling
+      → C2 compile (inline tree, unroll, vectorize)
+      → uncommon trap → deopt → interpreter / recompile
+```
+
+`dontinline` / `CompileCommand` exist for debugging, not production defaults.
+
+### 4. Production scenario
+
+A "harmless" interface extraction (`List` instead of `ArrayList` at a hot call site with two implementations) turned a monomorphic inline into bimorphic/megamorphic. CPU +10%, no GC change. `async-profiler` `-e itimer` showed the interface invoke; fixing the hot loop to a sealed/concrete type or splitting call sites restored inlining.
+
+**Mental model:** the JIT is a **profile-guided speculative compiler**. Fast paths assume the past looks like the future. Change the profile (new subtype, rare branch becomes common) and you pay deopt + less inlining.
+
+---
+
+## Concept 16: Off-Heap, Direct Memory, and Metaspace
+
+### 1. The problem it solves
+
+Heap dumps "look fine" but the process RSS is 8 GB. Seniors must name **non-heap** native memory: metaspace, thread stacks, code cache, direct/NIO buffers, JIT, GC card tables.
+
+### 2. The concept, completely
+
+| Region | Holds | Typical leak / pressure |
+|---|---|---|
+| **Heap** | Java objects | Retention, caches without bounds |
+| **Metaspace** | Class metadata | Classloader leaks (redeploy, generated proxies) |
+| **Code cache** | JIT nmethods | Too many generated classes; `-XX:ReservedCodeCacheSize` |
+| **Thread stacks** | One stack per platform thread | Too many threads × `-Xss` |
+| **Direct memory** | `ByteBuffer.allocateDirect`, Netty, many Kafka clients | Buffers not reclaimed until GC *and* cleaner runs |
+| **Compressed class space** | Klass structures (with compressed oops) | Same as metaspace family |
+
+Direct buffers are **not** in the Java heap. `-XX:MaxDirectMemorySize` (often defaults near max heap) caps them. Netty has its own leak detection.
+
+Metaspace grows with **class loaders**. A custom `URLClassLoader` per request, or Groovy/Janino generating classes without unloading, fills metaspace → `OutOfMemoryError: Metaspace`.
+
+### 3. Container note
+
+In Docker, `-Xmx` is not RSS. Native + heap + metaspace + code cache + stacks. Use `-XX:MaxRAMPercentage=75` (not a blind 75% if native is large). Java 8u191+ and Java 11+ read cgroup limits; still size **native** explicitly for Netty-heavy services.
+
+**Mental model:** the JVM is a **native process that happens to have a heap**. An OOM killer SIGKILL with heap 40% used is usually native, thread explosion, or file-mapped memory — not "GC is broken."
+
+---
+
+## Concept 17: GC Logging, Tuning Flags, and Containers
+
+### 1. The problem it solves
+
+Concept 6 named collectors. Production asks: *which flags, which logs, what is the first move when p99 GC is 400ms?*
+
+### 2. Unified logging (Java 9+)
+
+```
+-Xlog:gc*:file=/var/log/gc.log:time,uptime,level,tags:filecount=10,filesize=20M
+# common extras
+-Xlog:gc+heap=info
+-Xlog:safepoint
+```
+
+Read: pause time, heap before/after, promotion failures, to-space exhaustion, concurrent mode failure (CMS era), evacuation failure (G1).
+
+### 3. Sane production defaults (G1, Java 17/21)
+
+```
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=200          # goal, not a guarantee
+-XX:InitiatingHeapOccupancyPercent=45
+-Xms4g -Xmx4g                     # avoid resize storms unless you must
+-XX:+AlwaysPreTouch               # optional; stable RSS, slower start
+```
+
+ZGC / Shenandoah: ultra-low pause; different CPU/native footprint. Do not copy G1 flags onto ZGC.
+
+### 4. What *not* to do first
+
+- Do not start with `-XX:+UseParallelGC` on a latency SLO service "because throughput."
+- Do not set dozens of survivor ratios from a 2014 blog.
+- **First move:** confirm the collector, read a GC log for *one* bad pause, check allocation rate and live set. Allocation rate too high → fix the app (churn), not the collector.
+- Heap dump if live set is "everything is a cache."
+
+### 5. Container / RAM
+
+```
+-XX:MaxRAMPercentage=75.0
+-XX:InitialRAMPercentage=50.0
+# leave headroom for metaspace, direct, threads
+```
+
+`UseContainerSupport` is on by default in modern JDKs. A 512 MB pod with `-Xmx2g` is a cgroup OOM, not a Java heap OOM.
+
+**Mental model:** GC tuning is **last** after allocation rate and live-set leaks. Flags without a GC log are superstition.
+
+---
+
+## Concept 18: JFR, async-profiler, and `jcmd`
+
+### 1. The problem it solves
+
+Thread dumps are snapshots. Senior production work needs **continuous, low-overhead** profiles: CPU, allocations, locks, I/O, GC, safepoints.
+
+### 2. `jcmd` — first tool on a box
+
+```
+jcmd <pid> help
+jcmd <pid> VM.flags
+jcmd <pid> VM.native_memory summary          # if -XX:NativeMemoryTracking=summary
+jcmd <pid> GC.heap_info
+jcmd <pid> Thread.print
+jcmd <pid> JFR.start name=prod settings=profile duration=60s filename=/tmp/prod.jfr
+jcmd <pid> JFR.dump name=prod filename=/tmp/prod.jfr
+jcmd <pid> JFR.stop name=prod
+```
+
+### 3. Java Flight Recorder
+
+JFR is **in-process**, event-based, designed for production (typically low single-digit % overhead on default profiles). Open in JDK Mission Control. Look at: TLAB allocations, old-gen growth, socket reads, file I/O, monitor enter, compilation, **safepoint** duration.
+
+Do not enable every event in prod. Start with `profile` or a custom `.jfc`.
+
+### 4. async-profiler
+
+Samples **stacks** (CPU, alloc, wall-clock) with less safepoint bias than `jstack` loops. Use when JFR is unavailable or you want flame graphs fast:
+
+```
+asprof -e cpu -d 30 -f /tmp/cpu.html <pid>
+asprof -e alloc -d 30 -f /tmp/alloc.html <pid>
+asprof -e wall -t -d 30 -f /tmp/wall.html <pid>   # includes blocked time
+```
+
+### 5. Production playbook (JVM)
+
+1. Symptom: latency, RSS, CPU, or OOM?
+2. `jcmd VM.flags` + GC log — collector and heap vs RSS.
+3. 3× thread dumps **or** JFR 60s — blocked vs running.
+4. Allocation flame graph if GC is busy but live set is small (churn).
+5. Native memory tracking if heap ≠ RSS.
+6. Only then: change a GC flag or heap size.
+
+**Mental model:** observability is how you *test* Concepts 3–6 in production. Without JFR/`jcmd`/profiler, "we tuned GC" is a guess.
+
+---
+
 ## Roadmap Status: JVM & JMM Track Complete
 
-This closes out the core JVM + Java Memory Model mental model, thirteen concepts building on each other end-to-end:
+Core JVM + JMM mental model, eighteen concepts:
 
 1. Bytecode & the JVM abstraction layer
 2. Class loading pipeline (Loading → Linking → Initialization)
@@ -1194,8 +1418,13 @@ This closes out the core JVM + Java Memory Model mental model, thirteen concepts
 11. `java.util.concurrent` (CAS, `AtomicInteger`, `ReentrantLock`, ABA problem)
 12. `final` fields & safe publication
 13. `wait()`/`notify()`/`notifyAll()` (monitor-based coordination)
+14. Class file format and bytecode (`javap`, verification, `invokedynamic`)
+15. JIT deep dive (inlining, OSR, deopt, escape analysis)
+16. Off-heap, direct memory, metaspace
+17. GC logging, tuning flags, containers
+18. JFR, async-profiler, `jcmd`
 
-Executor framework / thread pools and other higher-level concurrency-and-multithreading topics are tracked as a separate track, not part of this JVM/JMM sequence.
+Executor framework / thread pools remain on the Concurrency track. The older "33-section internals outline" is folded into these 18 concepts — class-file/JIT/native/tuning/observability were the pieces that lived only in that outline.
 
 
 ---
@@ -1680,6 +1909,34 @@ atomically releases it and suspends the thread, re-acquiring it (restoring any p
 <summary>Can you call `obj.wait()` without synchronizing on `obj` first?</summary>
 
 no — throws `IllegalMonitorStateException`; the calling thread must hold `obj`'s monitor.
+
+</details>
+
+<details class="qa-item">
+<summary>What is `0xCAFEBABE` and why do you get `UnsupportedClassVersionError`?</summary>
+
+`0xCAFEBABE` is the `.class` magic number. `UnsupportedClassVersionError` means the **bytecode major version is newer than the running JVM** (e.g. Java 21 classes on a Java 17 runtime). `javap -v` shows the version. Fix: align runtime, or compile with `--release` of the oldest JVM you ship.
+
+</details>
+
+<details class="qa-item">
+<summary>What is deoptimization, and why can adding an interface slow a hot loop?</summary>
+
+Compiled code speculates (e.g. monomorphic call site). A new receiver type **invalidates** that nmethod (deopt) and the site may become megamorphic — **inlining dies**. Same bytecode, worse profile. Confirm with PrintCompilation / JFR compiler events / async-profiler, not with a heap dump.
+
+</details>
+
+<details class="qa-item">
+<summary>Heap is 40% used; the kernel OOM-kills the process. Where do you look?</summary>
+
+**Native RSS:** direct `ByteBuffer` / Netty, thread stacks × count, metaspace (loader leak), code cache, mapped files. `jcmd VM.native_memory summary` (if NMT on), metaspace and thread counts, `-XX:MaxDirectMemorySize`. Do not raise `-Xmx` first.
+
+</details>
+
+<details class="qa-item">
+<summary>First three commands when GC p99 is 400ms?</summary>
+
+(1) Confirm collector and heap vs live set from **GC log** (`-Xlog:gc*`). (2) Allocation flame graph (JFR or async-profiler `-e alloc`) — high churn vs huge live set. (3) `jcmd GC.heap_info` / one timed JFR. Tune flags only after you know whether you have a leak, a churn problem, or a too-small heap.
 
 </details>
 

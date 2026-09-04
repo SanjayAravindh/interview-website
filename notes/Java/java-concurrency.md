@@ -29,6 +29,7 @@
 22. [Part 22: Fork/Join Framework & Parallel Streams](#part-22-forkjoin-framework-parallel-streams)
 23. [Part 23: Virtual Threads (Project Loom, Java 21) vs Platform Threads](#part-23-virtual-threads-project-loom-java-21-vs-platform-threads)
 24. [Part 24: Production Debugging — Thread Dumps, Deadlock Detection, Monitoring](#part-24-production-debugging-thread-dumps-deadlock-detection-monitoring)
+25. [Part 25: Structured Concurrency, Virtual-Thread APIs, and Pinning](#part-25-structured-concurrency-virtual-thread-apis-and-pinning)
 
 ---
 
@@ -933,10 +934,30 @@ try (ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor()) {
         executor.submit(() -> { String r = callSlowDownstreamService(); process(r); });
     }
 }
+
+Thread.startVirtualThread(() -> handle(request));
+
+Thread v = Thread.ofVirtual()
+    .name("checkout-", 0)
+    .uncaughtExceptionHandler((t, e) -> log.error("vt failed {}", t.getName(), e))
+    .factory()
+    .newThread(() -> handle(request));
+v.start();
 ```
 On a recognized blocking call, the JVM **unmounts** the virtual thread from its carrier, freeing the carrier for other virtual threads; it **remounts** on completion — transparent to your code.
 
+**`Thread.ofVirtual()` vs `ofPlatform()`:** virtual builder creates cheap JVM threads; platform builder creates OS threads (`Thread.ofPlatform().daemon(true).name(...)`). Do not pool virtual threads.
+
 **Critical caveat:** a `synchronized` block that blocks **pins** the carrier thread (can't unmount) — a real, documented limitation. Use `ReentrantLock` instead for virtual-thread-heavy code with blocking critical sections.
+
+**Pinning diagnostics:**
+
+```
+-Djdk.tracePinnedThreads=short   # or full
+# JFR event: jdk.VirtualThreadPinned
+```
+
+If carriers sit in `BLOCKED` on monitors while virtual-thread count explodes, you have pinning. JNI / some `FileChannel` operations can pin as well.
 
 ### Common misconception
 
@@ -1134,8 +1155,49 @@ An on-call engineer correctly ruled out deadlock (varying stack traces across du
 
 
 
-### Part 25: Realistic Production Scenarios (with Answers)
+## Part 25: Structured Concurrency, Virtual-Thread APIs, and Pinning
 
+### What is it?
+
+**Structured concurrency** (Java 21+ `StructuredTaskScope`, API still evolving across 21–25) makes a group of concurrent tasks **outlive neither their parent nor each other without a policy**. Contrast: fire-and-forget `CompletableFuture` chains that lose cancellation and sibling errors.
+
+### How it works
+
+```java
+record CustomerView(User user, Account account) {}
+
+CustomerView load(String id) throws InterruptedException {
+    try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        StructuredTaskScope.Subtask<User> user = scope.fork(() -> userClient.get(id));
+        StructuredTaskScope.Subtask<Account> acct = scope.fork(() -> accountClient.get(id));
+        scope.join();
+        scope.throwIfFailed();
+        return new CustomerView(user.get(), acct.get());
+    }
+}
+```
+
+- **`ShutdownOnFailure`:** first failure cancels siblings; `throwIfFailed()` surfaces it.
+- **`ShutdownOnSuccess`:** first success cancels the rest (racing gateways).
+- Parent method **does not return** until `join()` — no leaked tasks after the try-with-resources.
+
+`ScopedValue` (Java 21+) is the structured replacement for many `ThreadLocal` uses: immutable, inherited into child tasks of a scope, no pool-leak story if you do not use thread pools.
+
+### Common misconception
+
+"Structured concurrency replaces virtual threads." No — it **composes** with them. Virtual threads make blocking forks cheap; the scope makes their **lifetime and errors** sane.
+
+### Common developer mistake
+
+Mixing `CompletableFuture.supplyAsync` (common pool) inside a scope without joining those futures — you reintroduce unstructured lifetimes.
+
+### Reactive streams (one-line follow-up)
+
+Project Reactor / RxJava have their **own** concurrency and context (`subscribeOn`, `Schedulers`, `Context`). The JMM still applies to shared mutable state those pipelines touch; `publishOn` does not make a `HashMap` thread-safe. Prefer keeping Reactor code **stateless** per signal, or use operators that serialize (`concatMap`). This note does not teach Reactor — if the interview goes there, say: *same visibility/atomicity rules, different scheduler.*
+
+### Real production scenario
+
+A BFF used three sequential Feign calls (180ms). Virtual threads + `StructuredTaskScope.ShutdownOnFailure` dropped wall time to ~max(call) without a reactive rewrite. A leftover `synchronized` cache in `userClient` pinned carriers under load until replaced with `ReentrantLock` / Caffeine.
 
 ---
 

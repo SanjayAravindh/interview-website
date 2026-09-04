@@ -30,6 +30,7 @@
 22. [Part 22 — Common Misconceptions](#part-22-common-misconceptions)
 23. [Part 23 — Realistic Java Exception Scenarios](#part-23-realistic-java-exception-scenarios)
 24. [Part 24 — Complete Concept Check](#part-24-complete-concept-check)
+25. [Part 25 — Senior Gaps: Lambdas, CompletableFuture, Serialization, Structured Concurrency](#part-25-senior-gaps-lambdas-completablefuture-serialization-structured-concurrency)
 
 ---
 
@@ -2668,10 +2669,134 @@ public void updateUserEmail(String userId, String newEmail) {
 | `Error` handling decisions | Part 21 (Error vs. Exception: Senior-Level Understanding) |
 | Common misconceptions | Part 22 (Common Misconceptions) |
 | Practical scenarios | Part 23 (Realistic Java Exception Scenarios) |
+| Lambdas, CF wrapping, exception serialization, structured concurrency | Part 25 (Senior Gaps) |
 
 ### The single thread running through the whole course
 
 **Every exception-handling decision — checked vs. unchecked, catch vs. propagate, rethrow vs. wrap, catch `Exception` vs. a specific type, log vs. stay silent — is really the same question asked at a different layer: "who is actually positioned to do something meaningful about this failure, and what does everyone else along the way owe to that eventual point of resolution?"** Design (Parts 13–14) is about naming failures so that question has a clear answer. The principles (Part 15: Exception Handling Principles) are about not answering it lazily. The vocabulary (Part 16: Exception Handling vs. Exception Throwing) is about being precise regarding who's actually doing what. Everything else — propagation, unwinding, suppression, chaining — is the mechanism that ensures the answer doesn't get lost in transit.
+
+---
+
+# Part 25 — Senior Gaps: Lambdas, CompletableFuture, Serialization, Structured Concurrency
+
+Parts 1–24 stay language-core. This part covers the four follow-ups that show up in senior interviews after "tell me about checked vs unchecked."
+
+## 1. Checked exceptions inside lambdas and streams
+
+`Function`, `Predicate`, `Consumer`, and `Runnable` do **not** declare checked exceptions. This is a compile-time wall, not a style preference.
+
+```java
+// Does not compile — Files.readString throws IOException
+list.stream().map(path -> Files.readString(path));
+```
+
+**Worked patterns (pick one and be consistent in a codebase):**
+
+```java
+// A. Wrap at the boundary — JDK's own type for IO
+list.stream().map(path -> {
+    try {
+        return Files.readString(path);
+    } catch (IOException e) {
+        throw new UncheckedIOException(e); // preserves cause
+    }
+});
+
+// B. Tiny throwing functional interface + adapter
+@FunctionalInterface
+interface ThrowingFunction<T, R, E extends Exception> {
+    R apply(T t) throws E;
+}
+
+static <T, R> Function<T, R> unchecked(ThrowingFunction<T, R, Exception> f) {
+    return t -> {
+        try {
+            return f.apply(t);
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    };
+}
+
+list.stream().map(unchecked(path -> Files.readString(path)));
+```
+
+Do **not** catch `Exception` and return `null` from the lambda — that turns a stream of values into a stream of landmines. Prefer `flatMap` + `Optional` if "skip bad files" is the real policy, and log the cause at that boundary.
+
+## 2. `CompletableFuture` exception model
+
+Async pipelines wrap failures. The type you catch at `join()` / `get()` is often **not** the type you threw.
+
+| API | Behavior |
+|---|---|
+| `thenApply` / `thenCompose` | Downstream skipped if previous completed exceptionally |
+| `exceptionally(fn)` | Recovers; `fn` receives the throwable (often already wrapped) |
+| `handle((ok, ex) -> ...)` | Always runs; you must branch on `ex == null` |
+| `whenComplete` | Side-effect only; does not recover unless you throw/complete a new stage |
+| `join()` | Wraps in `CompletionException` (unchecked) |
+| `get()` | Wraps in `ExecutionException` (checked) |
+
+```java
+CompletableFuture<String> f = CompletableFuture.supplyAsync(() -> load())
+    .thenApply(this::parse)
+    .exceptionally(ex -> {
+        Throwable cause = (ex instanceof CompletionException && ex.getCause() != null)
+            ? ex.getCause() : ex;
+        log.warn("load failed: {}", cause.toString());
+        return DEFAULT;
+    });
+```
+
+**Interview line:** `exceptionally` is recovery; `handle` is "either value or error"; `join` unwraps with `CompletionException`. Full composition lives in the Concurrency note (Part 16).
+
+## 3. Custom exceptions that cross a wire
+
+If a custom exception is serialized (HTTP session, RMI/legacy, Java-serialized queue, some RPC):
+
+- Declare **`serialVersionUID`** explicitly. A field add without it becomes `InvalidClassException` after a rolling deploy.
+- Keep the exception **data-only** (message, error code, ids). Do not serialize a live JPA entity or a socket as a field.
+- Prefer mapping to a DTO / `ProblemDetail` at the process boundary over sending live `Exception` graphs between services.
+
+```java
+public class OrderNotFoundException extends RuntimeException {
+    @Serial
+    private static final long serialVersionUID = 1L;
+    private final String orderId;
+
+    public OrderNotFoundException(String orderId) {
+        super("Order not found: " + orderId);
+        this.orderId = orderId;
+    }
+    public String getOrderId() { return orderId; }
+}
+```
+
+Serialization mechanics: see `notes/Java/java-serialization.md`.
+
+## 4. `equals` / `hashCode` / `toString` on exception types
+
+Exceptions are **almost never** keys in a `HashMap`. Do not implement `equals`/`hashCode` on exception classes unless you have a bizarre requirement — identity is correct, and adding value equality surprises `catch` debugging and test matchers.
+
+**Do** override `toString()` / the message constructor so logs show the domain ids (`orderId=…`), not `com.acme.OrderNotFoundException`. Put stable fields in the message **and** on accessors (Part 14). Lombok `@EqualsAndHashCode` on an exception is a footgun — exclude it.
+
+## 5. Structured concurrency exception aggregation (Java 21+)
+
+`StructuredTaskScope` (incubator/preview through 21–23; evolving in later JDKs) treats a set of tasks as **one unit**. If you shut down on failure, the scope can throw a **composite** failure rather than losing sibling exceptions.
+
+```java
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    Subtask<User> user = scope.fork(() -> userClient.get(id));
+    Subtask<Account> acct = scope.fork(() -> accountClient.get(id));
+    scope.join().throwIfFailed(); // failed child → scope fails; siblings cancelled
+    return new View(user.get(), acct.get());
+}
+```
+
+Failed children are not silently dropped: `throwIfFailed()` surfaces the first failure; policies exist to wait-for-all. This is the structured answer to "I fired three `CompletableFuture`s and only logged one `exceptionally`." Details and pinning: Concurrency Parts 23–25.
+
+**Mental model:** lambdas force wrapping; futures force *unwrapping*; serialization forces a UID; structured concurrency forces *aggregation*. Same principle as Part 16 — know who handles the failure, and do not lose the cause.
 
 ---
 

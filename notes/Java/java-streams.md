@@ -941,6 +941,8 @@ Parallel streams use **`ForkJoinPool.commonPool()`** by default:
 - `LinkedList`, `Stream.iterate`, IO streams.
 - Order-sensitive side effects without synchronization.
 
+**Virtual threads / structured concurrency:** parallel streams still share **`ForkJoinPool.commonPool()`** — they do **not** automatically become one-virtual-thread-per-element. For many blocking I/O calls, prefer `Executors.newVirtualThreadPerTaskExecutor()` or `StructuredTaskScope` (Concurrency Parts 23–25), not `parallelStream()`. If you must parallel-stream I/O, isolate it on a **dedicated** `ForkJoinPool` so you do not starve `CompletableFuture` defaults.
+
 ### Custom pool (Java 8+ pattern)
 
 Parallel streams cannot easily switch pools — workaround:

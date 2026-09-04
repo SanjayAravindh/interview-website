@@ -6,26 +6,28 @@
 
 ## Table of Contents
 
-1. [Part 2: Encapsulation](#part-2-encapsulation)
-2. [Part 3: Abstraction](#part-3-abstraction)
-3. [Part 4: Inheritance](#part-4-inheritance)
-4. [Part 5: Polymorphism](#part-5-polymorphism)
-5. [Part 6: The `Object` Class and Equality](#part-6-the-object-class-and-equality)
-6. [Part 7: Immutability](#part-7-immutability)
-7. [Part 8: Composition](#part-8-composition)
-8. [Part 8b: Aggregation](#part-8b-aggregation)
-9. [Part 9: Cohesion and Coupling](#part-9-cohesion-and-coupling)
-10. [Part 10: SOLID](#part-10-solid)
-11. [Part 11: Design Patterns Through OOP](#part-11-design-patterns-through-oop)
-12. [Part 12: OOP in Real Java Applications (Summary)](#part-12-oop-in-real-java-applications-summary)
-13. [Part 13: Misconceptions Experienced Developers Know Beginners Often Get Wrong](#part-13-misconceptions-experienced-developers-know-beginners-often-get-wrong)
+1. [Lesson 1: Objects, Classes, State, Behavior, Identity, References](#lesson-1-objects-classes-state-behavior-identity-references)
+2. [Part 2: Encapsulation](#part-2-encapsulation)
+3. [Part 3: Abstraction](#part-3-abstraction)
+4. [Part 4: Inheritance](#part-4-inheritance)
+5. [Part 5: Polymorphism](#part-5-polymorphism)
+6. [Part 6: The `Object` Class and Equality](#part-6-the-object-class-and-equality)
+7. [Part 7: Immutability](#part-7-immutability)
+8. [Part 8: Composition](#part-8-composition)
+9. [Part 8b: Aggregation](#part-8b-aggregation)
+10. [Part 9: Cohesion and Coupling](#part-9-cohesion-and-coupling)
+11. [Part 10: SOLID](#part-10-solid)
+12. [Part 11: Design Patterns Through OOP](#part-11-design-patterns-through-oop)
+13. [Part 12: OOP in Real Java Applications (Summary)](#part-12-oop-in-real-java-applications-summary)
+14. [Part 13: Misconceptions Experienced Developers Know Beginners Often Get Wrong](#part-13-misconceptions-experienced-developers-know-beginners-often-get-wrong)
+15. [Part 14: Implementation Challenges](#part-14-implementation-challenges)
+16. [Part 15: Design Decisions](#part-15-design-decisions)
+17. [Part 16: OOP Smell Catalog and Code-Review Drills](#part-16-oop-smell-catalog-and-code-review-drills)
+18. [Part 17: Advanced Implementation Challenges](#part-17-advanced-implementation-challenges)
+19. [Part 18: Progressive Project — Commerce Checkout Slice](#part-18-progressive-project-commerce-checkout-slice)
+20. [Practice Questions & Answers](#practice-questions-answers)
 
 ---
-
-
-
-
-
 
 ## Lesson 1: Objects, Classes, State, Behavior, Identity, References
 
@@ -475,35 +477,283 @@ A consolidated list (each traces back to a part above where it's covered in dept
 
 ---
 
+## Part 14: Implementation Challenges
+
+Parts 1–13 taught *what* the principles are. Implementation challenges force you to *apply* them under constraints: existing APIs, time pressure, and incomplete requirements. Work each challenge on paper or in a scratch file before reading the solution shape.
+
+### Challenge 1 — Money that cannot go negative
+
+**Given:** a `Wallet` with `double balance` and public `setBalance`. Production has already stored `-0.01` after a rounding refund.
+
+**Do:** redesign so a `Wallet` cannot represent a negative balance, and refunds that would go negative fail with a named domain exception — not a silent clamp.
+
+**Shape:** `Money` as an immutable value object (minor units / `BigDecimal` with explicit scale, never `double`). `Wallet.debit(Money)` / `credit(Money)` own the invariant. No setter. Tests: debit more than balance throws; credit of zero is either rejected or a no-op — pick one and document it.
+
+### Challenge 2 — Privilege change without leaking the collection
+
+**Given:** `User.getRoles()` returns `List<Role>` and controllers call `user.getRoles().add(Role.ADMIN)`.
+
+**Do:** make privilege escalation go through one method that can audit and authorize.
+
+**Shape:** store `EnumSet<Role>` internally; `getRoles()` returns `Set.copyOf(roles)`; `grantRole` / `revokeRole` are the only mutators. The collection type in the getter is an interface, never the live set.
+
+### Challenge 3 — Notification today, SMS "maybe next year"
+
+**Given:** product wants `NotificationService` now (email only) and "probably SMS later."
+
+**Do:** decide whether an interface exists today.
+
+**Shape:** name the method after the domain action (`notify(Customer, Message)`), not the channel (`sendEmail`). Extract an interface **when** a second implementation or a test seam is real — not because a slide said "always program to an interface." A single concrete class with a well-named method is cheaper than a speculative `EmailNotificationService` + unused `SmsNotificationService`.
+
+### Challenge 4 — Fragile inheritance in pricing
+
+**Given:** `StandardPricer` / `VipPricer` / `BlackFridayPricer` all override `compute` and copy 80% of the parent method.
+
+**Do:** stop the copy-paste without a 12-class hierarchy.
+
+**Shape:** one `PricingService` composed with a `DiscountPolicy` (Strategy). Black Friday is a policy, not a subclass. Inheritance is wrong here — the IS-A test fails ("a Black Friday pricer *is a* VIP pricer"? no).
+
+### Challenge 5 — Equals that broke a `HashSet`
+
+**Given:** `Order` uses default `Object.equals` (identity). A `Set<Order>` used for "already processed" admits the same business order twice after a reload from the DB (new instance, same id).
+
+**Do:** pick identity vs id-equality vs value-equality and implement `equals`/`hashCode` consistently.
+
+**Shape:** entities: equality by stable id **after** persistence; value objects: equality by all components. Never mix. If id is assigned late, document that two transient entities are never equal unless you use a UUID assigned at construction.
+
+### Challenge 6 — Thread-safe read of an immutable catalog
+
+**Given:** a `ProductCatalog` rebuilt every 5 minutes, read on every request.
+
+**Do:** share it safely without locking readers.
+
+**Shape:** immutable catalog object (or `Map.copyOf`); publisher writes a `volatile` reference. Readers never mutate. This is Part 7 + safe publication, not `Collections.synchronizedMap`.
+
+**Implementation mental model:** each challenge is a *constraint* plus an *invariant*. The code that compiles is not the answer — the answer is which Part 1–13 principle made the invalid state unrepresentable.
+
 ---
 
+## Part 15: Design Decisions
+
+Design decisions are not "which keyword." They are trade-offs you must *say out loud* in a senior interview: what you gain, what you lose, and what would change your mind.
+
+### Decision 1 — Inheritance vs composition
+
+| Choose inheritance when | Choose composition when |
+|---|---|
+| True IS-A, stable over time, LSP holds | You want reuse, variation, or test seams |
+| Framework requires a base type (`HttpServlet`) | The "is-a" is convenient fiction |
+| You need to override a small hook in a Template Method you control | You do not own the parent, or it is already a god class |
+
+Default: **composition**. Inheritance is a scarce resource — you get one superclass.
+
+### Decision 2 — Interface vs concrete class vs record
+
+- **Record:** immutable data with no identity and little behavior (`Money`, `Address`).
+- **Concrete class:** one implementation, no testing seam needed yet (`OrderNumberGenerator` wrapping `UUID`).
+- **Interface:** two+ implementations, or a boundary you must mock (`PaymentGateway`, `Clock` in tests).
+
+Wrong: `interface Customer` with one `CustomerImpl`. Right: `Customer` as a class; `PaymentGateway` as an interface.
+
+### Decision 3 — Checked vs unchecked at the domain boundary
+
+Domain rule violations (`InsufficientFundsException`) are usually **unchecked** so service methods stay readable — callers who can recover catch them; others let them become 409s at the controller. I/O and SQL stay checked *or* get wrapped once at the adapter into an application exception. Do not punch `SQLException` through the domain.
+
+### Decision 4 — Anemic model vs rich domain
+
+Anemic: `Order` is fields + getters; `OrderService` contains every rule. Rich: `order.addItem(...)` refuses shipped orders. Prefer rich **entities** for invariants that must hold regardless of which service touches them. Keep orchestration (saga steps, emails) in services — that is SRP, not anemia.
+
+### Decision 5 — DTO vs entity at the HTTP edge
+
+Never bind a JSON body onto a JPA entity. DTOs are untrusted input; entities enforce invariants. Mapping is boring and correct. "Fewer classes" is not a reason to let `isAdmin=true` mass-assign.
+
+### Decision 6 — When a pattern earns its keep
+
+Ask: *is the originating problem present?* Strategy for 2 algorithms is fine. Strategy for 1 algorithm is ceremony. Observer for one hardcoded listener is an interface you will never implement twice. Builder for 3 required fields is noise; for 9 optional fields on an immutable type it is the design.
+
+### Decision 7 — Equality for JPA entities
+
+Hibernate can give you a proxy. `equals` on mutable business fields breaks `Set` after flush. Senior default: equality on a **stable business key or UUID assigned in the constructor**, not on the database auto-id if it is null for new instances.
+
+**Design-decision mental model:** write the alternatives, the failure mode of each, and the metric that would make you switch. "It depends" without the *depends-on-what* is junior.
 
 ---
 
-### Scenario-Based Questions — With Answers
+## Part 16: OOP Smell Catalog and Code-Review Drills
 
+This is the missing "middle" slot between principles and later challenges — a reviewer's checklist. In an interview, walking a PR against this list is more impressive than naming SOLID letters.
 
+### Smells and the part that names the fix
 
+| Smell | Why it is wrong | Fix (part) |
+|---|---|---|
+| Public setters on invariant fields | Invalid states are representable | Encapsulation (2) |
+| `getX().getY().doZ()` | Law of Demeter; hidden coupling | Tell, Don't Ask (2) |
+| Interface for a single DTO | Abstraction without variation | Abstraction (3) |
+| Deep class hierarchy for reuse | Fragile base class | Inheritance vs composition (4, 8) |
+| Override that weakens the parent contract | LSP break | Polymorphism / SOLID (5, 10) |
+| Identity `equals` on a value type | Duplicate logical values in sets | Object equality (6) |
+| `final` class with mutable `List` field exposed live | Fake immutability | Immutability (7) |
+| Service constructs collaborators with `new` | Hidden coupling; untestable | Composition + DIP (8, 10) |
+| 400-line `*Service` / `*Manager` | Many reasons to change | SRP (10) |
+| Pattern applied with no originating problem | Noise | Patterns (11) |
+| Entity deserialized from `@RequestBody` | Mass assignment | Real apps (12) |
 
+### Drill 1 — Review this (find three defects)
 
+```java
+@Entity
+public class Account {
+    public double balance;
+    public List<String> roles = new ArrayList<>();
+    public void setBalance(double b) { this.balance = b; }
+}
 
+@RestController
+class AccountController {
+    @PostMapping("/accounts")
+    Account create(@RequestBody Account a) { return repo.save(a); }
+}
+```
 
+Defects: public mutable fields; no invariant on balance; live `roles` list; entity as request body; primitive money; no identity/equality story.
 
+### Drill 2 — Review this (inheritance)
 
+```java
+class Bird { void fly() {} }
+class Penguin extends Bird { void fly() { throw new UnsupportedOperationException(); } }
+```
 
+LSP: a `Bird` parameter is not safe. Model `FlyingBird` separately, or capability via composition (`FlightBehavior`), not a throwing override.
 
+### Drill 3 — Verbal script
 
+When reviewing: (1) What invariant can be broken? (2) What is the unit of reuse — inheritance or composition? (3) What is tested, and what is `new`'d inside the method? (4) What happens if this type is put in a `HashSet`? (5) Is there an interface that has only one reason to exist?
 
+**Smell mental model:** a smell is a *symptom*. Name the principle, then the smallest change that makes the illegal state unrepresentable.
 
+---
 
+## Part 17: Advanced Implementation Challenges
 
+These are production-shaped. They combine several parts and usually have more than one acceptable answer — you must defend yours.
 
+### Challenge A — Replace a type-switch without breaking callers
 
+**Context:** `PaymentService.process(type, amount)` switches on `"CARD"|"UPI"|"WALLET"`. New type every quarter. Callers pass raw strings from HTTP.
 
+**Deliver:** Strategy map keyed by a closed set (Java 21 `sealed` interface + `switch` exhaustiveness, or enum + registry). HTTP layer maps string → domain type once. Unknown type is 400 at the edge, never a fall-through `default` that silently no-ops.
 
+### Challenge B — Shared mutable `Order` across `@Async`
 
-### Guess the Output — With Answers
+**Context:** `Order` is mutated in the request thread and in an `@Async` confirmation email builder. Intermittent empty line-items.
 
+**Deliver:** treat `Order` as an entity with a clear lifecycle; snapshot an immutable `OrderConfirmation` (record) for the async path. Do not share a mutable aggregate across threads (Parts 7, 8, concurrency).
+
+### Challenge C — Feature flag that became a god class
+
+**Context:** `CheckoutService` has 14 `if (flags.isOn(...))` branches. Two teams ship weekly.
+
+**Deliver:** extract **policies** or **steps** behind interfaces; flags select implementations at composition time (`@ConditionalOnProperty` or a factory). The service orchestrates a list of `CheckoutStep`. SRP + OCP: new flag = new class, not a new `if`.
+
+### Challenge D — Soft-delete that broke uniqueness
+
+**Context:** `email` unique in DB; soft-delete sets `deleted=true` but unique constraint still fires on re-register.
+
+**Deliver:** this is an invariant that spans persistence and domain. Options: partial unique index `(email) WHERE deleted = false`; or include a `deleted_at` in the unique key; or anonymize email on delete. The OOP part: `Customer.deactivate()` owns the state change; the repository implements the physical uniqueness the domain assumes. Do not sprinkle `if (!deleted)` in five services.
+
+### Challenge E — Test seam without leaking internals
+
+**Context:** `PricingService` needs a frozen clock in tests; production uses `Instant.now()`.
+
+**Deliver:** inject `Clock` (JDK). Do not make `now` package-visible "for tests." Do not use PowerMock on `Instant`. DIP applied to time.
+
+### Challenge F — Copying a hierarchy to add logging
+
+**Context:** junior adds `LoggingPaymentService extends StripePaymentService` and overrides every method with `log + super`.
+
+**Deliver:** Decorator implementing `PaymentService`, wrapping any implementation. Logging is a cross-cutting wrap, not a subclass of Stripe.
+
+**Advanced-challenge mental model:** if the solution is a new keyword, you are probably wrong. If the solution is a new **boundary** (snapshot, policy, decorator, clock), you are in Part 17 territory.
+
+---
+
+## Part 18: Progressive Project — Commerce Checkout Slice
+
+Build (or design on a whiteboard) an end-to-end checkout that *forces* every earlier part to show up as a load-bearing decision. This is not a tutorial app — it is a curriculum capstone.
+
+### Domain
+
+- **Customer** (entity): id, email, shipping address; cannot check out with an empty address.
+- **Product** (entity): sku, name; price lives as `Money`.
+- **Cart** (entity or aggregate): customer-scoped; add/remove/quantity; cannot add quantity ≤ 0; cannot check out empty.
+- **Money** (value object): currency + minor units; addition only in the same currency.
+- **Order** (entity): created from a cart snapshot; status machine `PENDING → PAID → SHIPPED | CANCELLED`; illegal transitions throw.
+- **Payment** (entity or record of an attempt): amount, method, external id, outcome.
+- **Inventory reservation:** reserve on checkout, release on cancel / payment failure.
+
+### Boundaries (interfaces that *earn* their place)
+
+```java
+public interface PaymentGateway {
+    PaymentResult charge(Money amount, PaymentMethod method, String idempotencyKey);
+}
+
+public interface InventoryReservation {
+    Reservation reserve(Sku sku, int qty);
+    void release(ReservationId id);
+}
+
+public interface OrderRepository {
+    Order save(Order order);
+    Optional<Order> findById(OrderId id);
+}
+
+public interface Clock { Instant now(); } // tests freeze time
+```
+
+`NotificationSender` is an interface because email vs SMS vs no-op in tests is real variation. `Money` is a record, not an interface.
+
+### Use-case flow (`CheckoutService` — thin)
+
+1. Load cart; reject if empty (cart invariant).
+2. Reserve inventory (adapter; failures → domain exception).
+3. Create `Order` from cart **snapshot** (line items copied as value objects — cart can change later without mutating the order).
+4. Charge via `PaymentGateway` with **idempotency key** = order id.
+5. On success: `order.markPaid(clock.now())`; persist; emit `OrderPaid` (or return it to the controller).
+6. On payment failure: release reservation; `order.markPaymentFailed()`; do not leave PAID.
+7. Notify asynchronously with an **immutable** `OrderPaidNotice`, not the live `Order`.
+
+### What each part contributed
+
+| Part | Where it appears |
+|---|---|
+| 1–2 | Entities own invariants; no public setters |
+| 3 | Interfaces only at gateways/repos/clock |
+| 4–5 | Status as State/enum + methods, not `if (status.equals)` in the controller |
+| 6 | Entity id-equality; `Money` value equality |
+| 7 | Snapshots and notices are immutable |
+| 8 | Service *has* gateways; does not *extend* Stripe |
+| 9–10 | One reason to change per type; DIP toward `PaymentGateway` |
+| 11 | Strategy (payment method), Decorator (logging gateway), Factory (from payment type at the edge only) |
+| 12 | DTOs at HTTP; entities never `@RequestBody` |
+| 14–17 | Challenges above are slices of this project |
+
+### Progressive milestones (implement in order)
+
+1. **Model only:** `Money`, `Sku`, `OrderStatus` transitions — unit tests, no Spring.
+2. **Cart + Order snapshot** — mutating the cart after checkout must not change the order.
+3. **Fake `PaymentGateway` + `InventoryReservation`** — success, decline, timeout paths.
+4. **Idempotent checkout** — same order id charged once.
+5. **HTTP layer:** `CheckoutRequest` DTO, `ProblemDetail` for domain exceptions.
+6. **Optional:** persist with JPA; keep the domain free of annotations if you want a hexagonal slice — or accept JPA on entities and keep DTOs at the edge.
+
+### What "done" looks like in an interview
+
+You can draw the aggregate boundaries, name three invariants that are impossible to represent, explain why `PaymentGateway` is an interface and `Money` is not, and walk a failure (inventory reserved, charge declined) without leaving the system half-paid.
+
+**Project mental model:** a progressive project is the course run *forward* — each feature is a principle with a database and a deadline attached.
 
 ---
 

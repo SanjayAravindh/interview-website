@@ -41,6 +41,7 @@
 34. [Part 29 — Real-World Case Studies](#part-29-real-world-case-studies)
 35. [Part 30 — Simplified Internal Implementations](#part-30-simplified-internal-implementations)
 36. [Part 31 — Production Debugging](#part-31-production-debugging)
+37. [Part 33 — Final Comprehensive Evaluation](#part-33-final-comprehensive-evaluation)
 
 ---
 
@@ -2060,8 +2061,7 @@ not "because it's well-tested," but because of what specific mechanism?
 <details class="qa-item">
 <summary>28. A `Set<CustomKey>` used for request deduplication starts admitting duplicate requests only after several days of uptime, never in fresh restarts or in tests.</summary>
 
-1. **Non-thread-safe collections under hidden concurrency** — `HashMap`/`ArrayList` shared across requests were "safe" at 200 platform threads with low collision; 50k virtual threads expose check-then-act races and `ConcurrentModificationException`.
-2. **`synchronized` on shared structures** — more concurrent access causes lock contention and long pin times; virtual threads magnify scheduler queue depth when blocking on fat locks.
+**Likely:** broken `equals`/`hashCode` — e.g. `hashCode` uses mutable fields that change after insert, or `equals` is inconsistent with `hashCode`. Entries land in the wrong buckets and "new" keys miss their twins. **Confirm:** log `hashCode` before/after mutation; reproduce with long-lived mutable keys. **Fix:** immutable keys, or a `hashCode` derived only from stable fields.
 
 </details>
 
@@ -2156,8 +2156,81 @@ Equal objects must have equal hash codes. Hash-based collections place objects i
 <details class="qa-item">
 <summary>40. "We need a thread-safe, mostly-read collection with predictable iteration behavior and minimal write frequency. What do you choose, and what are you trading away?"</summary>
 
----
-
-*End of taught curriculum and practice phase. Part 33 (Final Comprehensive Evaluation) follows only after Level 1-8 exercises above have been attempted.*
+**`CopyOnWriteArrayList`** (or **`CopyOnWriteArraySet`**) — snapshot iterators, no locks on the read path. Trade-off: **O(n) copy on every write** — expensive if writes become frequent. Alternative for a map: immutable snapshot + atomic/`volatile` swap. You trade write cost and extra memory (copies) for read scalability and iterator safety.
 
 </details>
+
+---
+
+## Part 33 — Final Comprehensive Evaluation
+
+Part 32 was practice. This part is the **capstone**: a scored oral/written evaluation you can run in 45–60 minutes (self or with a peer). No new APIs — it tests whether Parts 1–31 + Level 1–8 hang together.
+
+### How to use this
+
+1. Close the earlier answers. Speak or write under a timer.
+2. Score each block 0–2 (0 = blank/wrong mechanism, 1 = right direction, 2 = precise + trade-off).
+3. Passing senior bar: **≥ 16 / 20** with no zero on blocks A or D.
+
+### Block A — Internals (10 minutes, 4 pts)
+
+1. Walk `HashMap.put` that triggers 16 → 32 resize: lo/hi split, why hashes are not fully recomputed.
+2. Why `get` on `ConcurrentHashMap` can be lock-free and what publication (`volatile` / ordered writes) makes that safe.
+3. Why `PriorityQueue.remove(Object)` is O(n) while `poll` is O(log n).
+4. Unmodifiable vs immutable — one snippet where confusing them is a production bug.
+
+### Block B — Selection (10 minutes, 4 pts)
+
+For each workload, name the structure, one rejected alternative, and the failure mode of the reject:
+
+1. 50M read-only lookup after a single bulk load.
+2. Top-10 leaderboard, single writer thread, thousands of updates/sec.
+3. ~15 listeners, iterated on every request, rare writes, many virtual threads.
+4. Dedup 200M keys, single-threaded, memory-bound.
+
+### Block C — Concurrency (10 minutes, 4 pts)
+
+1. Fix the classic `containsKey` + `put` + `get+1` race on `ConcurrentHashMap` with one atomic API.
+2. What breaks if `computeIfAbsent` mutates the **same** map?
+3. Two bug classes that surface when you move from 200 platform threads to many virtual threads.
+4. `CopyOnWriteArrayList` iterator vs `HashMap` fail-fast — structural reason, not "it's tested."
+
+### Block D — Production (10 minutes, 4 pts)
+
+Pick two; for each: root mechanism, how you confirm, fix.
+
+1. Dedup `Set<CustomKey>` admits duplicates only after days of uptime.
+2. One `HashMap` table array huge vs `size()`.
+3. Threads pile up in `synchronized` around a `HashMap` only in prod.
+4. `WeakHashMap` "cache" near-zero hit rate.
+
+### Block E — Design + interview (10 minutes, 4 pts)
+
+1. Rate limiter: 50k rps, per-API-key sliding 60s window, virtual threads — collection strategy.
+2. Verbal: refine "`ArrayList.add` is O(1)."
+3. When `ConcurrentSkipListMap` instead of `ConcurrentHashMap` — gain and cost.
+4. `equals`/`hashCode` contract in one minute, then the load-bearing direction that loses map entries.
+
+### Answer key (condensed)
+
+Use Part 32 answers as the full key. Evaluation-level must-hits:
+
+- **A1:** bit of old hash selects lo vs hi chain; no full rehash.
+- **A2:** published node fields; bin lock only on some writes.
+- **A3:** `remove` scans; `poll` is root + sift.
+- **A4:** `unmodifiableList(backing)` still changes when `backing.add` runs.
+- **B:** HashMap / min-heap-of-10 / COWAL / HashSet-or-external-sort-or-Bloom.
+- **C1:** `merge` / `compute` / `LongAdder` in CHM.
+- **C2:** recursive update / `IllegalStateException`.
+- **C3:** hidden races on unsynchronized collections; fat `synchronized` contention.
+- **C4:** iterator holds a snapshot array; `HashMap` compares `modCount`.
+- **D:** mutable `hashCode`; table never shrinks; coarse lock; weak keys without a strong canonical key.
+- **E:** striped `ConcurrentHashMap`+window or Redis; amortized O(1) append, O(n) insert-at-index and resize; CSLM for ordered ranges; `equals` ⇒ same `hashCode`.
+
+### Sign-off
+
+If you score the bar, the collections track is complete. If a block is a zero, return to the matching Part (hashing, CHM, heap, immutability, virtual threads) — do not start a new topic until that mechanism is explainable without the notes.
+
+---
+
+*End of taught curriculum, practice phase, and final evaluation.*
