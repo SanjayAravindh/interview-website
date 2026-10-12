@@ -15,15 +15,32 @@
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/github.min.css"
     />
-    <link rel="stylesheet" href="styles.css?v=20260904f" />
+    <link rel="stylesheet" href="styles.css?v=20261012a" />
   </head>
   <body>
     <div class="app">
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
-          <p class="brand-kicker">Interview prep</p>
-          <p class="brand">Interview Notes</p>
-          <p class="note-count" id="note-count" hidden></p>
+          <div class="sidebar-brand-row">
+            <div class="sidebar-brand">
+              <p class="brand-kicker">Interview prep</p>
+              <p class="brand">Interview Notes</p>
+              <p class="note-count" id="note-count" hidden></p>
+            </div>
+            <button
+              type="button"
+              class="panel-toggle"
+              id="sidebar-collapse"
+              aria-expanded="true"
+              aria-controls="sidebar"
+              title="Collapse topics"
+            >
+              <span class="visually-hidden">Collapse topics panel</span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 6 9 12l6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          </div>
           <form class="site-search" role="search" id="site-search">
             <label class="visually-hidden" for="search-input">Search notes</label>
             <div class="search-shell">
@@ -58,6 +75,20 @@
 
       <section class="workspace">
         <header class="reader-bar" id="reader-bar">
+          <button
+            type="button"
+            class="panel-toggle panel-toggle-open"
+            id="sidebar-expand"
+            aria-expanded="false"
+            aria-controls="sidebar"
+            title="Show topics"
+            hidden
+          >
+            <span class="visually-hidden">Show topics panel</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+          </button>
           <div class="reader-identity">
             <span class="reader-group" id="reader-group"></span>
             <span class="reader-title" id="reader-title">Choose a topic</span>
@@ -76,6 +107,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
-    <script src="app.js?v=20260904f"></script>
+    <script src="app.js?v=20261012a"></script>
   </body>
 </html>

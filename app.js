@@ -1,4 +1,8 @@
 (() => {
+  const appShell = document.querySelector(".app");
+  const sidebar = document.getElementById("sidebar");
+  const sidebarCollapse = document.getElementById("sidebar-collapse");
+  const sidebarExpand = document.getElementById("sidebar-expand");
   const topicList = document.getElementById("topic-list");
   const article = document.getElementById("article");
   const content = document.getElementById("content");
@@ -9,6 +13,7 @@
   const readerGroup = document.getElementById("reader-group");
   const readerTitle = document.getElementById("reader-title");
   const readerProgress = document.getElementById("reader-progress");
+  const SIDEBAR_KEY = "interview-notes-sidebar-collapsed";
 
   let notes = [];
   let currentNote = null;
@@ -452,6 +457,9 @@
     const url = noteUrl(note.id);
     history.pushState({ note: note.id }, "", url);
     loadNote(note);
+    if (window.matchMedia("(max-width: 860px)").matches) {
+      setSidebarCollapsed(true);
+    }
   });
 
   article.addEventListener("click", (event) => {
@@ -820,6 +828,39 @@
   }
 
   content.addEventListener("scroll", updateReadingProgress, { passive: true });
+
+  function setSidebarCollapsed(collapsed, { focus = false } = {}) {
+    appShell.classList.toggle("sidebar-collapsed", collapsed);
+    sidebarCollapse.setAttribute("aria-expanded", String(!collapsed));
+    sidebarExpand.setAttribute("aria-expanded", String(!collapsed));
+    sidebarExpand.hidden = !collapsed;
+    sidebar.setAttribute("aria-hidden", String(collapsed));
+    sidebar.inert = collapsed;
+    try {
+      localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0");
+    } catch (_) {
+      /* ignore quota / private mode */
+    }
+    if (focus) {
+      if (collapsed) sidebarExpand.focus();
+      else sidebarCollapse.focus();
+    }
+  }
+
+  function toggleSidebar() {
+    setSidebarCollapsed(!appShell.classList.contains("sidebar-collapsed"), { focus: true });
+  }
+
+  sidebarCollapse.addEventListener("click", toggleSidebar);
+  sidebarExpand.addEventListener("click", toggleSidebar);
+
+  try {
+    if (localStorage.getItem(SIDEBAR_KEY) === "1") {
+      setSidebarCollapsed(true);
+    }
+  } catch (_) {
+    /* ignore */
+  }
 
   init();
 })();

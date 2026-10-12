@@ -44,17 +44,31 @@ body {
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   height: 100%;
   overflow: hidden;
+  transition: grid-template-columns 0.28s var(--ease);
+}
+
+.app.sidebar-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr);
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   min-height: 0;
   background:
     linear-gradient(165deg, #243640 0%, var(--bg-sidebar) 55%, #10181d 100%);
   color: var(--text-sidebar);
   overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
+  transition: opacity 0.22s var(--ease), visibility 0.22s var(--ease);
+}
+
+.app.sidebar-collapsed .sidebar {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  border-right-width: 0;
 }
 
 .visually-hidden {
@@ -75,6 +89,62 @@ body {
   flex-shrink: 0;
   padding: 1.2rem 1.15rem 0.9rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar-brand-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.sidebar-brand {
+  min-width: 0;
+}
+
+.panel-toggle {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--text-sidebar);
+  cursor: pointer;
+  transition: background 0.16s var(--ease), border-color 0.16s var(--ease), color 0.16s var(--ease);
+}
+
+.panel-toggle svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.panel-toggle:hover {
+  background: var(--bg-sidebar-hover);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #fff;
+}
+
+.panel-toggle:focus-visible {
+  outline: 2px solid rgba(196, 92, 38, 0.75);
+  outline-offset: 2px;
+}
+
+.panel-toggle-open {
+  border-color: rgba(196, 92, 38, 0.35);
+  background: rgba(255, 252, 246, 0.9);
+  color: var(--text);
+}
+
+.panel-toggle-open:hover {
+  background: #fff;
+  border-color: rgba(196, 92, 38, 0.55);
+  color: var(--accent);
 }
 
 .brand-kicker {
@@ -341,6 +411,9 @@ body {
 .reader-bar {
   position: relative;
   z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   flex-shrink: 0;
   min-height: var(--reader-bar-h);
   padding: 0.85rem 1.6rem 0.7rem;
@@ -354,6 +427,7 @@ body {
   flex-direction: column;
   gap: 0.12rem;
   min-width: 0;
+  flex: 1;
 }
 
 .reader-group {
