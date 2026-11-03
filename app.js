@@ -357,11 +357,56 @@
     return `${tocBlock}\n${md}`;
   }
 
+  let visualizerAssets = null;
+
+  function replaceVisualizerMarkers(markdown) {
+    return markdown.replace(
+      /^```visualizer[ \t]+(hashmap|concurrenthashmap)[ \t]*\r?\n```[ \t]*$/gm,
+      (_, kind) => `<div class="viz-mount" data-visualizer="${kind}"></div>`
+    );
+  }
+
+  function loadVisualizerAssets() {
+    if (window.InterviewVisualizers) return Promise.resolve();
+    if (visualizerAssets) return visualizerAssets;
+    visualizerAssets = new Promise((resolve, reject) => {
+      const css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "visualizers.css?v=20261103b";
+      document.head.appendChild(css);
+      const script = document.createElement("script");
+      script.src = "visualizers.js?v=20261103b";
+      script.onload = () => resolve();
+      script.onerror = () => {
+        visualizerAssets = null;
+        reject(new Error("Could not load the visualizer."));
+      };
+      document.body.appendChild(script);
+    });
+    return visualizerAssets;
+  }
+
+  async function mountVisualizers(root) {
+    const mounts = root.querySelectorAll(".viz-mount");
+    if (!mounts.length) return;
+    try {
+      await loadVisualizerAssets();
+    } catch (error) {
+      mounts.forEach((el) => {
+        el.textContent = error.message || "Could not load the visualizer.";
+      });
+      return;
+    }
+    if (!root.isConnected || !window.InterviewVisualizers) return;
+    window.InterviewVisualizers.mount(root);
+  }
+
   function renderMarkdownWithQA(markdown) {
     const { body, items } = extractDetailsBlocks(markdown);
     const prepared = insertTableOfContents(body);
+    const withWidgets = replaceVisualizerMarkers(prepared);
     slugState.used = new Set();
-    let html = marked.parse(prepared);
+    let html = marked.parse(withWidgets);
     if (items.length) {
       html += renderQAHtml(items);
     }
@@ -412,6 +457,7 @@
       article.classList.add("is-ready");
       highlightCode(article);
       highlightArticleQuery(currentSearchQuery());
+      await mountVisualizers(article);
       bindHeadingSpy();
       if (headingId) {
         scrollToHeading(headingId);
