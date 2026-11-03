@@ -13,7 +13,12 @@
   const readerGroup = document.getElementById("reader-group");
   const readerTitle = document.getElementById("reader-title");
   const readerProgress = document.getElementById("reader-progress");
+  const themeToggle = document.getElementById("theme-toggle");
+  const hljsLight = document.getElementById("hljs-light");
+  const hljsDark = document.getElementById("hljs-dark");
   const SIDEBAR_KEY = "interview-notes-sidebar-collapsed";
+  const THEME_KEY = "interview-notes-theme";
+  const THEME_COLOR = { light: "#f6f0e4", dark: "#141c21" };
 
   let notes = [];
   let currentNote = null;
@@ -861,6 +866,50 @@
   } catch (_) {
     /* ignore */
   }
+
+  function explicitTheme() {
+    try {
+      const stored = localStorage.getItem(THEME_KEY);
+      return stored === "light" || stored === "dark" ? stored : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function applyTheme(theme) {
+    const explicit = explicitTheme();
+    document.documentElement.setAttribute("data-theme", theme);
+    document.querySelectorAll('meta[name="theme-color"]').forEach((node) => {
+      if (explicit) {
+        node.setAttribute("content", THEME_COLOR[theme]);
+        return;
+      }
+      const media = node.getAttribute("media") || "";
+      node.setAttribute("content", media.includes("dark") ? THEME_COLOR.dark : THEME_COLOR.light);
+    });
+    if (hljsLight) hljsLight.disabled = theme === "dark";
+    if (hljsDark) hljsDark.disabled = theme !== "dark";
+    if (themeToggle) {
+      themeToggle.setAttribute("aria-pressed", theme === "dark" ? "true" : "false");
+    }
+  }
+
+  themeToggle.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch (_) {
+      /* ignore quota / private mode */
+    }
+    applyTheme(next);
+  });
+
+  const themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+  themeMedia.addEventListener("change", () => {
+    if (!explicitTheme()) applyTheme(themeMedia.matches ? "dark" : "light");
+  });
+
+  applyTheme(explicitTheme() || (themeMedia.matches ? "dark" : "light"));
 
   init();
 })();

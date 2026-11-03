@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Interview Notes</title>
     <base href="./" />
+    <meta name="theme-color" content="#f6f0e4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#141c21" media="(prefers-color-scheme: dark)" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -12,10 +14,43 @@
       rel="stylesheet"
     />
     <link
+      id="hljs-light"
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/github.min.css"
     />
-    <link rel="stylesheet" href="styles.css?v=20261012a" />
+    <link
+      id="hljs-dark"
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/npm/highlight.js@11.11.1/styles/github-dark.min.css"
+      disabled
+    />
+    <script>
+      (function () {
+        var key = "interview-notes-theme";
+        var stored = null;
+        try {
+          stored = localStorage.getItem(key);
+        } catch (e) {}
+        var theme =
+          stored === "light" || stored === "dark"
+            ? stored
+            : matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+        document.documentElement.setAttribute("data-theme", theme);
+        var dark = theme === "dark";
+        var lightLink = document.getElementById("hljs-light");
+        var darkLink = document.getElementById("hljs-dark");
+        if (lightLink) lightLink.disabled = dark;
+        if (darkLink) darkLink.disabled = !dark;
+        if (stored === "light" || stored === "dark") {
+          var color = dark ? "#141c21" : "#f6f0e4";
+          var nodes = document.getElementsByName("theme-color");
+          for (var i = 0; i < nodes.length; i++) nodes[i].setAttribute("content", color);
+        }
+      })();
+    </script>
+    <link rel="stylesheet" href="styles.css?v=20261103a" />
   </head>
   <body>
     <div class="app">
@@ -93,6 +128,10 @@
             <span class="reader-group" id="reader-group"></span>
             <span class="reader-title" id="reader-title">Choose a topic</span>
           </div>
+          <button type="button" class="theme-toggle" id="theme-toggle" aria-pressed="false" aria-label="Dark theme">
+            <span class="theme-toggle-full">Dark theme</span>
+            <span class="theme-toggle-short">Dark</span>
+          </button>
           <div class="reader-progress" aria-hidden="true">
             <span class="reader-progress-fill" id="reader-progress"></span>
           </div>
@@ -107,6 +146,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.11.1/build/highlight.min.js"></script>
-    <script src="app.js?v=20261012a"></script>
+    <script src="app.js?v=20261103a"></script>
   </body>
 </html>
