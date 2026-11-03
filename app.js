@@ -710,7 +710,7 @@
   }
 
   async function loadSearchIndex() {
-    const sources = ["api/search-index", "search-index.json"];
+    const sources = ["search-index.json"];
     for (const url of sources) {
       try {
         const response = await fetch(url, { cache: "no-store" });
@@ -807,7 +807,7 @@
   });
 
   async function loadNotesIndex() {
-    const sources = ["api/notes", "notes.json"];
+    const sources = ["notes.json"];
     let lastError = "Could not load notes";
     for (const url of sources) {
       try {
