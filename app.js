@@ -19,6 +19,7 @@
   const SIDEBAR_KEY = "interview-notes-sidebar-collapsed";
   const THEME_KEY = "interview-notes-theme";
   const THEME_COLOR = { light: "#f6f0e4", dark: "#141c21" };
+  const phoneQuery = window.matchMedia("(max-width: 860px)");
 
   let notes = [];
   let currentNote = null;
@@ -462,9 +463,7 @@
     const url = noteUrl(note.id);
     history.pushState({ note: note.id }, "", url);
     loadNote(note);
-    if (window.matchMedia("(max-width: 860px)").matches) {
-      setSidebarCollapsed(true);
-    }
+    if (isPhone()) setDrawerOpen(false, { focus: true });
   });
 
   article.addEventListener("click", (event) => {
@@ -658,6 +657,9 @@
     history.pushState({ note: note.id }, "", url);
     searchResults.hidden = true;
     searchInput.setAttribute("aria-expanded", "false");
+    if (isPhone()) {
+      setTimeout(() => setDrawerOpen(false, { focus: true }), 0);
+    }
     await loadNote(note, headingId);
   }
 
@@ -759,9 +761,14 @@
         openSearchHit(chosen.dataset.note, chosen.dataset.heading, searchInput.value.trim());
       }
     } else if (event.key === "Escape") {
-      searchResults.hidden = true;
-      searchInput.setAttribute("aria-expanded", "false");
-      searchInput.blur();
+      if (!searchResults.hidden) {
+        event.stopPropagation();
+        searchResults.hidden = true;
+        searchInput.setAttribute("aria-expanded", "false");
+        searchInput.blur();
+        return;
+      }
+      if (!isPhone()) searchInput.blur();
     }
   });
 
@@ -773,6 +780,13 @@
   });
 
   document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && isPhone() && appShell.classList.contains("drawer-open")) {
+      if (searchResults.hidden) {
+        event.preventDefault();
+        setDrawerOpen(false, { focus: true });
+      }
+      return;
+    }
     if (event.key === "/" && event.target !== searchInput && !event.altKey && !event.ctrlKey && !event.metaKey) {
       const tag = event.target.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
@@ -787,6 +801,9 @@
       searchResults.hidden = true;
       searchInput.setAttribute("aria-expanded", "false");
     }
+    if (!isPhone() || !appShell.classList.contains("drawer-open")) return;
+    if (sidebar.contains(event.target) || event.target.closest("#sidebar-expand")) return;
+    setDrawerOpen(false, { focus: true });
   });
 
   async function loadNotesIndex() {
@@ -834,6 +851,35 @@
 
   content.addEventListener("scroll", updateReadingProgress, { passive: true });
 
+  function isPhone() {
+    return phoneQuery.matches;
+  }
+
+  function setDrawerOpen(open, { focus = false } = {}) {
+    appShell.classList.toggle("drawer-open", open);
+    sidebarExpand.hidden = false;
+    sidebarExpand.setAttribute("aria-expanded", String(open));
+    sidebarCollapse.setAttribute("aria-expanded", String(open));
+    sidebar.setAttribute("aria-hidden", String(!open));
+    sidebar.inert = !open;
+    if (!focus) return;
+    (open ? sidebarCollapse : sidebarExpand).focus();
+  }
+
+  function syncSidebarForViewport() {
+    if (isPhone()) {
+      setDrawerOpen(appShell.classList.contains("drawer-open"));
+      return;
+    }
+    appShell.classList.remove("drawer-open");
+    const collapsed = appShell.classList.contains("sidebar-collapsed");
+    sidebarCollapse.setAttribute("aria-expanded", String(!collapsed));
+    sidebarExpand.setAttribute("aria-expanded", String(!collapsed));
+    sidebarExpand.hidden = !collapsed;
+    sidebar.setAttribute("aria-hidden", String(collapsed));
+    sidebar.inert = collapsed;
+  }
+
   function setSidebarCollapsed(collapsed, { focus = false } = {}) {
     appShell.classList.toggle("sidebar-collapsed", collapsed);
     sidebarCollapse.setAttribute("aria-expanded", String(!collapsed));
@@ -853,6 +899,10 @@
   }
 
   function toggleSidebar() {
+    if (isPhone()) {
+      setDrawerOpen(!appShell.classList.contains("drawer-open"), { focus: true });
+      return;
+    }
     setSidebarCollapsed(!appShell.classList.contains("sidebar-collapsed"), { focus: true });
   }
 
@@ -910,6 +960,9 @@
   });
 
   applyTheme(explicitTheme() || (themeMedia.matches ? "dark" : "light"));
+
+  syncSidebarForViewport();
+  phoneQuery.addEventListener("change", syncSidebarForViewport);
 
   init();
 })();

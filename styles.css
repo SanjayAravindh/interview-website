@@ -84,6 +84,10 @@ body {
   border: 0;
 }
 
+.sidebar-backdrop {
+  display: none;
+}
+
 .sidebar-header {
   position: relative;
   z-index: 30;
@@ -820,8 +824,71 @@ body {
 }
 
 @media (max-width: 860px) {
-  :root {
-    --sidebar-width: 220px;
+  .app,
+  .app.sidebar-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .workspace {
+    grid-column: 1 / -1;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    z-index: 30;
+    top: var(--reader-bar-h);
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background: rgba(16, 24, 29, 0.46);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s var(--ease);
+  }
+
+  .app.drawer-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .sidebar,
+  .app.sidebar-collapsed .sidebar {
+    position: fixed;
+    z-index: 40;
+    top: var(--reader-bar-h);
+    bottom: 0;
+    left: 0;
+    width: min(20rem, calc(100% - 3rem));
+    border-right-width: 0;
+    opacity: 0;
+    visibility: visible;
+    pointer-events: none;
+    transform: translateX(-100%);
+    transition: transform 0.22s var(--ease), opacity 0.22s var(--ease);
+  }
+
+  .app.drawer-open .sidebar,
+  .app.sidebar-collapsed.drawer-open .sidebar {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+    border-right-width: 1px;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  }
+
+  .panel-toggle {
+    width: 44px;
+    height: 44px;
+  }
+
+  .topic-list a {
+    min-height: 44px;
+  }
+
+  .site-search input {
+    font-size: 16px;
   }
 
   .reader-bar {
@@ -835,6 +902,21 @@ body {
   .article {
     padding: 1.35rem 1.15rem;
     border-radius: 12px;
+    overflow-x: hidden;
+    overflow-wrap: anywhere;
+  }
+
+  .article pre {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-wrap: normal;
+  }
+
+  .article table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-wrap: normal;
   }
 }
 
