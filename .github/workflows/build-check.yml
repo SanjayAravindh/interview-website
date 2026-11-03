@@ -1,0 +1,20 @@
+name: Build check
+
+on:
+  pull_request:
+    branches: [site-improvements, main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node build-notes.js
+      - run: node -e "const n=require('./dist/notes.json'); require('./dist/search-index.json'); if (!n.notes.length) process.exit(1)"
+      - run: node check-notes.js
