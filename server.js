@@ -47,7 +47,7 @@ function safeResolve(urlPath) {
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
-  if (req.method === "GET" && url.pathname === "/api/notes") {
+  if (req.method === "GET" && (url.pathname === "/api/notes" || url.pathname === "/notes.json")) {
     try {
       return sendJson(res, 200, { notes: listNotes() });
     } catch (error) {
@@ -55,7 +55,7 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  if (req.method === "GET" && url.pathname === "/api/search-index") {
+  if (req.method === "GET" && (url.pathname === "/api/search-index" || url.pathname === "/search-index.json")) {
     try {
       const { buildSearchIndex } = require("./lib/search-index");
       return sendJson(res, 200, buildSearchIndex());
