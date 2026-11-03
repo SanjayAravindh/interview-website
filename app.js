@@ -25,6 +25,7 @@
   let currentNote = null;
   let searchDocs = [];
   let searchReady = false;
+  let searchIndexStarted = false;
   let searchTimer = 0;
   let activeResult = -1;
   let tocSpyLinks = [];
@@ -710,10 +711,12 @@
   }
 
   async function loadSearchIndex() {
+    if (searchIndexStarted) return;
+    searchIndexStarted = true;
     const sources = ["search-index.json"];
     for (const url of sources) {
       try {
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(url);
         if (!response.ok) continue;
         const data = await response.json();
         searchDocs = Array.isArray(data.documents) ? data.documents : [];
@@ -728,6 +731,9 @@
     }
     searchReady = true;
     searchDocs = [];
+    if (searchInput.value.trim()) {
+      renderSearchResults(searchInput.value, searchNotes(searchInput.value));
+    }
   }
 
   searchForm.addEventListener("submit", (event) => {
@@ -738,7 +744,12 @@
     openSearchHit(chosen.dataset.note, chosen.dataset.heading, searchInput.value.trim());
   });
 
+  searchInput.addEventListener("focus", () => {
+    loadSearchIndex();
+  });
+
   searchInput.addEventListener("input", () => {
+    loadSearchIndex();
     window.clearTimeout(searchTimer);
     searchTimer = window.setTimeout(() => {
       activeResult = -1;
@@ -811,7 +822,7 @@
     let lastError = "Could not load notes";
     for (const url of sources) {
       try {
-        const response = await fetch(url, { cache: "no-store" });
+        const response = await fetch(url);
         if (!response.ok) {
           lastError = `Could not load ${url} (${response.status})`;
           continue;
@@ -828,7 +839,6 @@
     try {
       const data = await loadNotesIndex();
       notes = Array.isArray(data.notes) ? data.notes.sort(compareCurriculum) : [];
-      loadSearchIndex();
       if (notes.length) {
         noteCount.hidden = false;
         noteCount.textContent = `${notes.length} topics`;
@@ -839,7 +849,11 @@
         return;
       }
       const existingQ = currentSearchQuery();
-      if (existingQ) searchInput.value = existingQ;
+      if (existingQ) {
+        searchInput.value = existingQ;
+        loadSearchIndex();
+        renderSearchResults(existingQ, []);
+      }
       await syncFromLocation({ replace: true });
     } catch (error) {
       setPlaceholder(
