@@ -4,7 +4,7 @@ const { ROOT, NOTES_DIR, listNotes } = require("./lib/notes");
 const { buildSearchIndex } = require("./lib/search-index");
 
 const DIST = path.join(ROOT, "dist");
-const SITE_FILES = ["index.html", "styles.css", "app.js", "favicon.svg"];
+const SITE_FILES = ["index.html", "styles.css", "app.js", "visualizers.js", "visualizers.css", "favicon.svg"];
 
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
