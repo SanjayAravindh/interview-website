@@ -1,0 +1,17 @@
+{
+  "name": "Interview Notes",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "dev-server",
+      "command": "npm start",
+      "description": "Serves the Interview Notes app (node server.js) on http://localhost:3000. Lists markdown files under notes/ via /api/notes and renders them client-side."
+    }
+  ],
+  "ports": [
+    {
+      "name": "web",
+      "port": 3000
+    }
+  ]
+}
