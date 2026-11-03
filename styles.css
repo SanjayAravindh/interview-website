@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: #efe8d8;
   --bg-sidebar: #162228;
   --bg-sidebar-hover: #24343c;
@@ -220,6 +221,7 @@ body {
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.28);
   color: #fff;
+  color-scheme: dark;
   font: inherit;
   font-size: 0.88rem;
   transition: border-color 0.18s var(--ease), background 0.18s var(--ease), box-shadow 0.18s var(--ease);
@@ -452,6 +454,52 @@ body {
   letter-spacing: -0.02em;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.theme-toggle {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0.32rem 0.62rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 252, 246, 0.9);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  border-color: rgba(196, 92, 38, 0.55);
+  color: var(--accent);
+}
+
+.theme-toggle:focus-visible {
+  outline: 2px solid rgba(196, 92, 38, 0.75);
+  outline-offset: 2px;
+}
+
+.theme-toggle-short {
+  display: none;
+}
+
+@media (max-width: 480px) {
+  .theme-toggle-full {
+    display: none;
+  }
+
+  .theme-toggle-short {
+    display: inline;
+  }
+}
+
+.theme-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: rgba(196, 92, 38, 0.55);
+  color: var(--accent);
 }
 
 .reader-progress {
@@ -879,5 +927,119 @@ body {
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #141c21;
+  --bg-code: #10171b;
+  --text: #e8eef2;
+  --text-muted: #b4c3cd;
+  --accent: #f0a56e;
+  --accent-soft: rgba(240, 165, 110, 0.16);
+  --border: #3a4c56;
+  --shadow: 0 18px 50px rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at 18% -10%, rgba(240, 165, 110, 0.14), transparent 36%),
+    linear-gradient(180deg, #18242b 0%, var(--bg) 48%, #10171b 100%);
+}
+
+html[data-theme="dark"] .reader-bar {
+  background: rgba(20, 28, 33, 0.9);
+  border-bottom-color: rgba(58, 76, 86, 0.9);
+}
+
+html[data-theme="dark"] .reader-progress {
+  background: rgba(240, 165, 110, 0.2);
+}
+
+html[data-theme="dark"] .workspace {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 8rem);
+}
+
+html[data-theme="dark"] .content {
+  scrollbar-color: rgba(200, 214, 222, 0.4) transparent;
+}
+
+html[data-theme="dark"] .panel-toggle-open {
+  border-color: rgba(240, 165, 110, 0.4);
+  background: rgba(16, 23, 27, 0.95);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .panel-toggle-open:hover {
+  background: #24343c;
+  border-color: rgba(240, 165, 110, 0.7);
+  color: var(--accent);
+}
+
+html[data-theme="dark"] .theme-toggle {
+  background: rgba(16, 23, 27, 0.9);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+html[data-theme="dark"] .theme-toggle:hover,
+html[data-theme="dark"] .theme-toggle[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: rgba(240, 165, 110, 0.55);
+  color: var(--accent);
+}
+
+html[data-theme="dark"] .article {
+  background: #1b262d;
+}
+
+html[data-theme="dark"] .error {
+  color: #ffb4ae;
+}
+
+html[data-theme="dark"] .sk {
+  background: linear-gradient(90deg, #1c272e 25%, #2a3942 45%, #1c272e 65%);
+  background-size: 220% 100%;
+}
+
+html[data-theme="dark"] .article a:hover {
+  color: #ffd0b0;
+}
+
+html[data-theme="dark"] .article pre {
+  background: #0d1117;
+  border-color: #30363d;
+}
+
+html[data-theme="dark"] .article th {
+  background: #24323a;
+}
+
+html[data-theme="dark"] .article details.qa-item {
+  background: #152026;
+}
+
+html[data-theme="dark"] .article details.qa-item[open] {
+  border-color: rgba(240, 165, 110, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+html[data-theme="dark"] .search-result mark,
+html[data-theme="dark"] .article mark.search-hit {
+  background: #f0a56e;
+  color: #1a120c;
+}
+
+html[data-theme="dark"] .article mark.search-hit {
+  animation-name: hit-flash-dark;
+}
+
+@keyframes hit-flash-dark {
+  0% {
+    background: #ffd0b0;
+  }
+  100% {
+    background: #f0a56e;
   }
 }
