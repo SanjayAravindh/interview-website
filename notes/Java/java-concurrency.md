@@ -759,6 +759,9 @@ A thread-safe map achieving high concurrency via fine-grained locking (bucket-le
 
 **Evolution:** Java 7 segment-locking (16 segments) → Java 8+ per-bucket locking, mostly lock-free reads.
 
+```visualizer concurrenthashmap
+```
+
 **Atomic compound methods** — the direct fix for check-then-act races:
 ```java
 map.putIfAbsent("a", 2);

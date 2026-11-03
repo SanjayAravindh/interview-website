@@ -485,6 +485,9 @@ If keys implement `Comparable`, that's used for tree ordering; otherwise `System
 
 `resize()`: allocates a new table at 2× capacity (always doubling), recomputes threshold, rehashes every entry. Since capacity always doubles and index is `hash & (capacity - 1)`, going from capacity 16 to 32 means exactly **one additional bit** of the hash now participates. For any entry, its old and new index differ by at most that one bit — every entry in old bucket `i` goes to new bucket `i` or `i + oldCapacity`. The JDK splits each old bucket's chain into "lo" and "hi" chains in one pass based on that single bit, preserving relative order — cheaper than recomputing from scratch, though still O(n) overall.
 
+```visualizer hashmap
+```
+
 ## `put`, `get`, `remove`, `containsKey`
 
 - `remove(k)`: hash, index, bucket walk, unlink, `size--`. **No resize on removal** — `HashMap` never shrinks its table automatically.
@@ -949,6 +952,9 @@ Pre-Java-8: **segment-based locking** (16 segments, coarse). Java 8 redesign:
 **3. Volatile reads for `get()`** — no locking at all, ever; safe because nodes are effectively append-only once published.
 
 **4. Cooperative, multi-threaded resizing** — any thread calling `put()` during a resize can help migrate buckets in parallel via `ForwardingNode` sentinels, distributing resize cost across active threads rather than one long serial pause.
+
+```visualizer concurrenthashmap
+```
 
 ## `compute`, `merge`, `putIfAbsent` — where atomicity actually matters
 
